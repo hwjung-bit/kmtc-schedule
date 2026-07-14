@@ -649,20 +649,29 @@ async function loadShips() {
 
 async function loadScheduleFor(codes) {
   if (!codes.length) return {};
-  const { data, error } = await sb
-    .from('schedules').select('*')
-    .in('vessel_code', codes)
-    .order('eta', { ascending: true });
-  if (error) {
-    console.error('schedule load error:', error);
-    return {};
-  }
-  console.log('loadScheduleFor: loaded', (data||[]).length, 'rows');
   const map = {};
-  (data || []).forEach(r => {
-    (map[r.vessel_code] = map[r.vessel_code] || [])
-      .push(r);
-  });
+  // Load per vessel to avoid 1000-row limit
+  // Batch 3 at a time for speed
+  for (let i = 0; i < codes.length; i += 3) {
+    const batch = codes.slice(i, i + 3);
+    const promises = batch.map(async (code) => {
+      const { data, error } = await sb
+        .from('schedules').select('*')
+        .eq('vessel_code', code)
+        .order('eta', { ascending: true })
+        .limit(1000);
+      if (error) {
+        console.error('schedule load error ' + code, error);
+        return;
+      }
+      if (data && data.length) map[code] = data;
+    });
+    await Promise.all(promises);
+  }
+  const total = Object.values(map).reduce(
+    (s, r) => s + r.length, 0);
+  console.log('loadScheduleFor: loaded',
+    total, 'rows for', Object.keys(map).length, 'vessels');
   return map;
 }
 
