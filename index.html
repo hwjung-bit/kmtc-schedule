@@ -807,22 +807,35 @@ function processSchedule(rows) {
     })
     .sort((a, b) => a.firstEta - b.firstEta);
 
-  // Find current voyage
+  // Find current voyage — closest to today
   const now = new Date();
   let curIdx = -1;
+
+  // First: find voyage where firstEta <= now <= lastEtd (both must be valid dates)
   for (let i = 0; i < voyages.length; i++) {
     const v = voyages[i];
-    if (v.firstEta <= now &&
-        (!v.lastEtd || v.lastEtd >= now)) {
+    if (v.firstEta && v.lastEtd &&
+        !isNaN(v.firstEta) && !isNaN(v.lastEtd) &&
+        v.firstEta <= now && v.lastEtd >= now) {
       curIdx = i; break;
     }
   }
+
+  // If not found: find the latest voyage that started before now
   if (curIdx < 0) {
-    // Find next future voyage
+    for (let i = voyages.length - 1; i >= 0; i--) {
+      if (voyages[i].firstEta && !isNaN(voyages[i].firstEta)
+          && voyages[i].firstEta <= now) {
+        curIdx = i; break;
+      }
+    }
+  }
+
+  // If still not found: find first future voyage
+  if (curIdx < 0) {
     curIdx = voyages.findIndex(
-      v => v.firstEta > now
+      v => v.firstEta && !isNaN(v.firstEta) && v.firstEta > now
     );
-    if (curIdx > 0) curIdx--;
     if (curIdx < 0) curIdx = voyages.length - 1;
   }
   const current = voyages[curIdx] || null;
