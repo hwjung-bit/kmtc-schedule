@@ -1,0 +1,4001 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport"
+  content="width=device-width, initial-scale=1,
+  maximum-scale=1, user-scalable=no,
+  viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#023a76">
+<title>KMTC Schedule</title>
+
+<!-- ===== Fonts ===== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect"
+  href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap"
+  rel="stylesheet">
+
+<!-- ===== Supabase JS CDN ===== -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+<style>
+/* ===== CSS Custom Properties (Light / Dark) ===== */
+:root {
+  --primary: #0064B4;
+  --primary-dark: #004B8D;
+  --gradient: linear-gradient(155deg,#0a4e96,#023a76);
+  --page: #f8fafc;
+  --card: #fff;
+  --cardbr: #eef1f6;
+  --ink: #10233f;
+  --ink2: #33415c;
+  --ink3: #6b7891;
+  --muted: #97a2b5;
+  --divider: #f1f4f8;
+  --group-700: #00897b;
+  --group-1800: #1e88e5;
+  --group-2500: #3949ab;
+  --group-4300: #6a3ab5;
+  --group-5500: #8e24aa;
+  --font: 'Noto Sans KR','Inter',sans-serif;
+  --mono: 'Inter',monospace;
+  --toast-bg: #023a76;
+}
+[data-theme="dark"] {
+  --page: #0d1117;
+  --card: #161b22;
+  --cardbr: #30363d;
+  --ink: #e6edf3;
+  --ink2: #c9d1d9;
+  --ink3: #8b949e;
+  --muted: #6e7681;
+  --divider: #21262d;
+  --toast-bg: #1f6feb;
+}
+/* ===== Reset / Base ===== */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;
+  font-family:var(--font);
+  background:var(--page);color:var(--ink);
+  -webkit-tap-highlight-color:transparent;
+  overscroll-behavior:none;
+}
+input,button,textarea,select{font-family:inherit}
+a{color:var(--primary);text-decoration:none}
+a:hover{color:var(--primary-dark)}
+::-webkit-scrollbar{width:0;height:0}
+input[type=date]{color-scheme:light}
+[data-theme="dark"] input[type=date]{color-scheme:dark}
+
+/* ===== Animations ===== */
+@keyframes kspin{to{transform:rotate(360deg)}}
+.kspin{animation:kspin .7s linear infinite}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .25s ease}
+@keyframes toastIn{from{opacity:0;transform:translateY(40px)}
+  to{opacity:1;transform:translateY(0)}}
+@keyframes toastOut{from{opacity:1;transform:translateY(0)}
+  to{opacity:0;transform:translateY(40px)}}
+
+/* ===== App Shell ===== */
+#app{display:flex;flex-direction:column;
+  height:100dvh;min-height:0;position:relative;
+  max-width:480px;margin:0 auto;
+  background:var(--page)}
+
+/* ===== Tab Content ===== */
+.tab-content{flex:1;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain}
+
+/* ===== Sticky Header ===== */
+.tab-header{background:var(--gradient);
+  padding:14px 18px 16px;color:#fff;
+  position:sticky;top:0;z-index:20}
+
+/* ===== Bottom Tab Bar ===== */
+.tab-bar{flex:0 0 auto;background:var(--card);
+  border-top:1px solid var(--cardbr);
+  box-shadow:0 -4px 20px rgba(20,40,80,.06);
+  padding:8px 6px calc(6px + env(safe-area-inset-bottom));
+  display:flex;z-index:30}
+.tab-bar-item{flex:1;display:flex;flex-direction:column;
+  align-items:center;gap:3px;padding:6px 0;cursor:pointer;
+  transition:opacity .15s}
+.tab-bar-item .icon{font-size:21px}
+.tab-bar-item .label{font-size:10.5px;font-weight:500;
+  color:var(--muted)}
+.tab-bar-item.active .label{font-weight:700;
+  color:var(--primary)}
+
+/* ===== Ship Card ===== */
+.ship-card{background:var(--card);border-radius:16px;
+  box-shadow:0 2px 10px rgba(20,40,80,.06);
+  border:1px solid var(--cardbr);overflow:hidden;
+  margin-bottom:10px}
+.ship-card-row{display:flex;align-items:stretch;
+  cursor:pointer}
+.ship-color-bar{width:6px;flex:0 0 6px}
+.ship-card-body{flex:1;padding:10px 12px;min-width:0}
+.ship-code{flex:0 0 auto;font-family:'Inter';
+  font-weight:800;font-size:17px;color:var(--ink);
+  letter-spacing:-.3px}
+.ship-route{display:flex;align-items:baseline;gap:5px;
+  font-family:'Inter';font-weight:800;font-size:13px;
+  color:var(--ink);white-space:nowrap;cursor:help}
+.ship-eta-short{flex:0 0 auto;font-family:'Inter';
+  font-size:10px;color:var(--muted)}
+.ship-status{flex:0 0 auto;display:flex;
+  align-items:center;gap:3px;font-size:10.5px;
+  font-weight:700;padding:3px 8px;border-radius:16px}
+.ship-star{flex:0 0 auto;font-size:16px;cursor:pointer;
+  user-select:none}
+
+/* ===== Expand Panel ===== */
+.ship-expand{border-top:1px dashed var(--cardbr);
+  background:var(--page);padding:14px}
+.spec-grid{display:grid;grid-template-columns:1fr 1fr 1fr;
+  gap:8px;margin-bottom:14px}
+.spec-item{background:var(--card);
+  border:1px solid var(--cardbr);border-radius:9px;
+  padding:8px 10px}
+.spec-label{font-size:9.5px;color:var(--muted)}
+.spec-val{font-size:12px;font-weight:700;
+  color:var(--ink);font-family:'Inter'}
+
+/* ===== Voyage Tabs ===== */
+.voy-tabs{display:flex;gap:6px;margin-bottom:12px}
+.voy-tab{flex:1;text-align:center;font-size:12px;
+  font-weight:700;padding:8px 0;border-radius:9px;
+  cursor:pointer;border:1px solid var(--cardbr);
+  background:var(--card);color:var(--primary);
+  transition:all .15s}
+.voy-tab.active{background:var(--primary);color:#fff;
+  border-color:var(--primary)}
+
+/* ===== Port Call List ===== */
+.port-call{display:flex;align-items:center;gap:12px;
+  padding-bottom:13px}
+.port-dot{width:11px;height:11px;border-radius:50%;
+  box-sizing:border-box;flex:0 0 auto}
+.port-info{flex:1;display:flex;align-items:center;
+  justify-content:space-between;gap:10px}
+.port-name{font-size:13px;color:var(--ink2)}
+.port-times{display:flex;gap:14px;flex:0 0 auto}
+.port-time{width:82px;text-align:right;
+  font-family:'Inter';font-size:11px;color:var(--ink3)}
+
+/* ===== Toast ===== */
+.toast{position:fixed;bottom:80px;left:50%;
+  transform:translateX(-50%);z-index:100;
+  background:var(--toast-bg);color:#fff;
+  padding:10px 20px;border-radius:24px;
+  font-size:13px;font-weight:600;
+  box-shadow:0 6px 24px rgba(0,0,0,.25);
+  pointer-events:none;white-space:nowrap;
+  animation:toastIn .3s ease}
+.toast.out{animation:toastOut .3s ease forwards}
+
+/* ===== Confirm Overlay ===== */
+.overlay{position:fixed;inset:0;
+  background:rgba(10,20,40,.45);
+  display:flex;align-items:center;
+  justify-content:center;z-index:60;padding:30px}
+.confirm-box{background:var(--card);border-radius:18px;
+  padding:24px 22px 20px;width:100%;max-width:306px;
+  box-shadow:0 20px 50px rgba(10,20,40,.4)}
+
+/* ===== Login Screen ===== */
+.login-bg{flex:1;overflow-y:auto;display:flex;
+  flex-direction:column;padding:0 30px;
+  background:linear-gradient(165deg,#0a4e96 0%,
+  #023a76 45%,#001b3f 100%)}
+.login-center{flex:1;display:flex;flex-direction:column;
+  justify-content:center;align-items:center;
+  min-height:600px}
+.login-icon{width:76px;height:76px;border-radius:20px;
+  background:rgba(255,255,255,.10);
+  border:1px solid rgba(255,255,255,.18);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:22px}
+.login-title{font-family:'Inter';font-weight:800;
+  font-size:38px;letter-spacing:1px;color:#fff;
+  line-height:1}
+.login-sub{margin-top:10px;font-size:12px;
+  letter-spacing:5px;color:#8fb6e6;
+  font-family:'Inter';font-weight:600}
+.login-desc{margin-top:6px;font-size:12px;
+  color:#b9cee8}
+.login-input{height:52px;border-radius:14px;
+  border:1px solid rgba(255,255,255,.22);
+  background:rgba(255,255,255,.10);padding:0 18px;
+  font-size:15px;color:#fff;outline:none;width:100%}
+.login-input::placeholder{color:rgba(255,255,255,.5)}
+.login-btn{height:52px;margin-top:6px;border:none;
+  border-radius:14px;background:#fff;color:#023a76;
+  font-weight:700;font-size:16px;cursor:pointer;
+  width:100%;font-family:var(--font)}
+.login-error{font-size:13px;color:#ffd166;
+  padding:2px 4px}
+.pending-box{display:flex;align-items:center;gap:8px;
+  background:rgba(255,209,102,.12);
+  border:1px solid rgba(255,209,102,.35);
+  border-radius:12px;padding:12px 14px;font-size:13px;
+  color:#ffe1a0}
+
+/* ===== Chip / Badge ===== */
+.chip{display:inline-flex;align-items:center;
+  font-size:12.5px;font-weight:600;padding:6px 13px;
+  border-radius:20px;cursor:pointer;
+  flex:0 0 auto;white-space:nowrap}
+.route-badge{font-size:11.5px;font-weight:700;
+  color:var(--primary);background:#e8f1fb;
+  padding:3px 9px;border-radius:8px}
+.change-banner{margin-top:8px;display:flex;
+  align-items:center;gap:6px;background:#fff3e0;
+  border:1px solid #ffd9a8;border-radius:9px;
+  padding:6px 9px}
+.change-banner span:last-child{font-size:11px;
+  font-weight:700;color:#c25d00;line-height:1.35}
+
+/* ===== Loading Spinner (overlay) ===== */
+.sync-spinner{position:absolute;top:12px;
+  left:0;right:0;display:flex;justify-content:center;
+  z-index:30}
+.sync-pill{display:flex;align-items:center;gap:8px;
+  background:#023a76;color:#fff;padding:8px 16px;
+  border-radius:20px;font-size:12.5px;font-weight:600;
+  box-shadow:0 6px 18px rgba(2,58,118,.35)}
+.sync-ring{display:inline-block;width:13px;height:13px;
+  border:2px solid rgba(255,255,255,.4);
+  border-top-color:#fff;border-radius:50%}
+
+/* ===== Settings Card ===== */
+.settings-card{background:var(--card);border-radius:16px;
+  border:1px solid var(--cardbr);
+  box-shadow:0 2px 8px rgba(20,40,80,.05);
+  padding:16px;margin-bottom:20px}
+.avatar{width:46px;height:46px;border-radius:50%;
+  background:var(--primary);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:18px;font-family:'Inter'}
+.dark-toggle{display:inline-flex;align-items:center;
+  width:50px;height:28px;border-radius:16px;padding:3px;
+  cursor:pointer;transition:background .2s}
+.dark-knob{width:22px;height:22px;border-radius:50%;
+  background:var(--card);
+  box-shadow:0 1px 3px rgba(0,0,0,.3);
+  transition:transform .2s}
+.logout-btn{width:100%;height:42px;margin-top:12px;
+  border:1px solid #f0d4d4;border-radius:11px;
+  background:#fff5f5;color:#d14343;font-weight:700;
+  font-size:14px;cursor:pointer;font-family:var(--font)}
+
+/* ===== Dock Card ===== */
+.dock-card{background:var(--card);border-radius:14px;
+  box-shadow:0 2px 8px rgba(20,40,80,.05);
+  border:1px solid var(--cardbr);padding:11px 14px;
+  display:flex;align-items:center;
+  justify-content:space-between;gap:10px;
+  margin-bottom:10px}
+.dock-card.current{border-color:#ffe0bd;
+  box-shadow:0 2px 10px rgba(238,124,26,.12)}
+
+/* ===== Utility ===== */
+.section-label{font-size:12px;font-weight:700;
+  color:var(--muted);padding:0 2px 10px}
+.empty-box{background:var(--card);border-radius:14px;
+  border:1px dashed var(--cardbr);padding:26px 18px;
+  text-align:center}
+.search-box{display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.14);
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:11px;padding:0 12px;height:42px}
+.search-box input{flex:1;border:none;
+  background:transparent;outline:none;color:#fff;
+  font-size:13.5px;font-family:var(--font)}
+.search-box input::placeholder{
+  color:rgba(255,255,255,.5)}
+.search-box-light{background:var(--card);
+  border:1px solid var(--cardbr)}
+.search-box-light input{color:var(--ink)}
+.search-box-light input::placeholder{
+  color:var(--muted)}
+.clear-x{cursor:pointer;opacity:.85;font-size:15px;
+  color:#fff;user-select:none}
+.group-header{display:flex;align-items:center;
+  justify-content:space-between;padding:10px 0;
+  cursor:pointer}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<!-- ========================================
+     KMTC Schedule - Supabase Edition
+     Single-file standalone web app
+======================================== -->
+<div id="app"></div>
+
+<!-- ===== Toast Container ===== -->
+<div id="toast-container"></div>
+
+<script>
+/* ==================================================
+   SUPABASE CONNECTION
+================================================== */
+const SUPABASE_URL =
+  'https://zfwdipsgdfrqkjjjajgz.supabase.co';
+const SUPABASE_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
+  + 'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpm'
+  + 'd2RpcHNnZGZycWtqamphamd6Iiwicm9sZSI6'
+  + 'ImFub24iLCJpYXQiOjE3ODQwMDY1MjgsImV4'
+  + 'cCI6MjA5OTU4MjUyOH0.cznJchy7AQyF29jv'
+  + 'fwIM0Ou-hA_0gM5Eosoc-AuLHDY';
+
+const sb = window.supabase.createClient(
+  SUPABASE_URL, SUPABASE_KEY
+);
+
+/* ==================================================
+   UTILITIES
+================================================== */
+function $(sel, ctx) {
+  return (ctx || document).querySelector(sel);
+}
+function $$(sel, ctx) {
+  return [...(ctx || document).querySelectorAll(sel)];
+}
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) Object.entries(attrs).forEach(([k, v]) => {
+    if (k === 'style' && typeof v === 'object') {
+      Object.assign(el.style, v);
+    } else if (k.startsWith('on')) {
+      el.addEventListener(k.slice(2).toLowerCase(), v);
+    } else if (k === 'className') {
+      el.className = v;
+    } else if (k === 'html') {
+      el.innerHTML = v;
+    } else {
+      el.setAttribute(k, v);
+    }
+  });
+  kids.flat(Infinity).forEach(c => {
+    if (c == null || c === false) return;
+    el.appendChild(
+      typeof c === 'string' || typeof c === 'number'
+        ? document.createTextNode(String(c))
+        : c
+    );
+  });
+  return el;
+}
+
+// SHA-256 password hash
+async function hashPassword(pw) {
+  const data = new TextEncoder().encode(pw);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Date helpers
+function parseDate(s) {
+  if (!s) return null;
+  // "2026-08-30T18:00:00+09:00" or "2026-08-30 18:00"
+  return new Date(s);
+}
+function fmtShort(d) {
+  if (!d || isNaN(d)) return '-';
+  return (d.getMonth()+1) + '/'
+    + String(d.getDate()).padStart(2,'0')
+    + ' ' + String(d.getHours()).padStart(2,'0')
+    + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function fmtDateOnly(d) {
+  if (!d || isNaN(d)) return '-';
+  return (d.getMonth()+1) + '/'
+    + String(d.getDate()).padStart(2,'0');
+}
+function fmtFull(d) {
+  if (!d || isNaN(d)) return '-';
+  return d.getFullYear() + '.'
+    + String(d.getMonth()+1).padStart(2,'0') + '.'
+    + String(d.getDate()).padStart(2,'0') + ' '
+    + String(d.getHours()).padStart(2,'0') + ':'
+    + String(d.getMinutes()).padStart(2,'0');
+}
+function fmtDateISO(d) {
+  if (!d || isNaN(d)) return '';
+  return d.getFullYear() + '-'
+    + String(d.getMonth()+1).padStart(2,'0') + '-'
+    + String(d.getDate()).padStart(2,'0');
+}
+function portShort(name) {
+  if (!name) return '';
+  return name.split(',')[0].trim();
+}
+function numFmt(n) {
+  return (n||0).toLocaleString();
+}
+
+/* Toast notification */
+let _toastTimer = null;
+function showToast(msg, dur) {
+  dur = dur || 2500;
+  const c = document.getElementById('toast-container');
+  c.innerHTML = '';
+  const el = h('div', {className: 'toast'}, msg);
+  c.appendChild(el);
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => c.innerHTML = '', 350);
+  }, dur);
+}
+
+/* Confirm dialog */
+let _confirmResolve = null;
+function showConfirm(msg) {
+  return new Promise(resolve => {
+    _confirmResolve = resolve;
+    renderConfirm(msg);
+  });
+}
+function renderConfirm(msg) {
+  let ov = document.getElementById('confirm-overlay');
+  if (ov) ov.remove();
+  ov = h('div', {
+    id: 'confirm-overlay', className: 'overlay'
+  },
+    h('div', {className: 'confirm-box'}, [
+      h('div', {style:{
+        fontSize:'13px',fontWeight:'700',
+        color:'#0064B4',textAlign:'center',
+        marginBottom:'10px'
+      }}, '확인'),
+      h('div', {style:{
+        fontSize:'14.5px',fontWeight:'600',
+        color:'var(--ink)',lineHeight:'1.6',
+        textAlign:'center',wordBreak:'keep-all'
+      }}, msg),
+      h('div', {style:{
+        display:'flex',gap:'10px',marginTop:'22px'
+      }}, [
+        h('button', {style:{
+          flex:'1',height:'44px',
+          border:'1px solid #e0e6ee',
+          borderRadius:'12px',
+          background:'var(--card)',color:'#6b7891',
+          fontWeight:'700',fontSize:'14px',
+          cursor:'pointer',fontFamily:'var(--font)'
+        }, onClick: () => {
+          ov.remove(); _confirmResolve(false);
+        }}, '취소'),
+        h('button', {style:{
+          flex:'1',height:'44px',border:'none',
+          borderRadius:'12px',
+          background:'#0064B4',color:'#fff',
+          fontWeight:'700',fontSize:'14px',
+          cursor:'pointer',fontFamily:'var(--font)'
+        }, onClick: () => {
+          ov.remove(); _confirmResolve(true);
+        }}, '확인')
+      ])
+    ])
+  );
+  document.getElementById('app').appendChild(ov);
+}
+
+/* ==================================================
+   GROUP COLOR MAP
+================================================== */
+const GROUP_COLORS = {
+  '700~1000 TEU': '#00897b',
+  '700~1000': '#00897b',
+  '1800 TEU': '#1e88e5',
+  '1800': '#1e88e5',
+  '2500~2800 TEU': '#3949ab',
+  '2500~2800': '#3949ab',
+  '4300 TEU': '#6a3ab5',
+  '4300': '#6a3ab5',
+  '5500~6500 TEU': '#8e24aa',
+  '5500~6500': '#8e24aa'
+};
+function groupColor(ship) {
+  const g = ship.ship_group || ship.size_type || '';
+  for (const [k, v] of Object.entries(GROUP_COLORS)) {
+    if (g.includes(k) ||
+        g.replace(/\s*TEU/i,'').includes(k)) return v;
+  }
+  // Fallback based on size_type text
+  const st = (ship.size_type || '').toUpperCase();
+  if (/700|1000/.test(st)) return '#00897b';
+  if (/1800|BKKMAX/.test(st)) return '#1e88e5';
+  if (/2500|2800/.test(st)) return '#3949ab';
+  if (/4300/.test(st)) return '#6a3ab5';
+  return '#8e24aa';
+}
+function groupKey(ship) {
+  const st = (ship.size_type || '').toUpperCase();
+  if (/700|1000/.test(st)) return '700~1000 TEU';
+  if (/1800|BKKMAX/.test(st)) return '1800 TEU';
+  if (/2500|2800/.test(st)) return '2500~2800 TEU';
+  if (/4300/.test(st)) return '4300 TEU';
+  return '5500~6500 TEU';
+}
+const GROUP_ORDER = [
+  '700~1000 TEU','1800 TEU',
+  '2500~2800 TEU','4300 TEU','5500~6500 TEU'
+];
+
+/* ==================================================
+   APP STATE
+================================================== */
+const state = {
+  // Auth
+  loggedIn: false,
+  user: null,       // full user row
+  loginForm: 'login', // 'login'|'register'|'forgot'
+  loginEmail: '',
+  loginPassword: '',
+  loginError: '',
+  regEmail: '', regName: '', regPassword: '', regPasswordConfirm: '',
+  regDept: '', regPurpose: '', regError: '',
+  forgotEmail: '', forgotMsg: '', forgotErr: '',
+
+  // Data
+  ships: [],        // from ships table
+  schedules: {},    // vessel_code -> rows
+  docks: [],        // from docks table
+  favorites: { ship: [], port: [] },
+
+  // UI
+  activeTab: 'schedule',
+  loading: false,
+  expanded: null,
+  voyTab: {},       // code -> 'cur'|'next'
+  showSpec: {},     // code -> bool
+  schedQuery: '',
+  fleetTab: 'KMTC',
+  dateFrom: '',
+  dateTo: '',
+
+  // Dock tab
+  dockQuery: '',
+  dockView: 'list',
+  dockExpanded: {},
+
+  // Port tab
+  portQuery: '',
+  portRegion: '전체',
+  selectedPort: null,
+  openRegions: {},
+  recentPorts: [],
+
+  // Settings tab
+  settingsTab: 'myships',
+  settingsSub: 'ship',
+  settingsFleet: 'KMTC',
+  favSearch: '',
+  accountSub: 'pending',
+  pendingUsers: [],
+  registeredUsers: [],
+  showPwForm: false,
+  pwNew: '', pwConfirm: '',
+  showShipForm: false, editShipCode: null,
+
+  // Config
+  dark: false,
+  lastUpdate: '-',
+};
+
+// Persist/restore from localStorage
+try {
+  const s = localStorage.getItem('kmtc_session');
+  if (s) {
+    state.loggedIn = true;
+    state.user = JSON.parse(s);
+  }
+} catch(e) {}
+try {
+  state.dark =
+    localStorage.getItem('kmtc_dark') === '1';
+} catch(e) {}
+try {
+  state.recentPorts =
+    JSON.parse(
+      localStorage.getItem('kmtc_recent') || '[]'
+    );
+} catch(e) {}
+
+if (state.dark) {
+  document.documentElement.setAttribute(
+    'data-theme', 'dark'
+  );
+}
+
+/* ==================================================
+   SUPABASE DATA LOADING
+================================================== */
+async function loadShips() {
+  console.log('loadShips: starting...');
+  const { data, error } = await sb
+    .from('ships').select('*')
+    .order('code');
+  console.log('loadShips: data=', data ? data.length : 'null', 'error=', error);
+  if (error) {
+    console.error('ships load error:', error);
+    // Try cache
+    try {
+      const c = JSON.parse(
+        localStorage.getItem('kmtc_ships_cache')
+      );
+      if (c) return c;
+    } catch(e) {}
+    return [];
+  }
+  try {
+    localStorage.setItem(
+      'kmtc_ships_cache', JSON.stringify(data)
+    );
+  } catch(e) {}
+  return data || [];
+}
+
+async function loadScheduleFor(codes) {
+  if (!codes.length) return {};
+  const { data, error } = await sb
+    .from('schedules').select('*')
+    .in('vessel_code', codes)
+    .order('eta', { ascending: true });
+  if (error) {
+    console.error('schedule load error:', error);
+    return {};
+  }
+  console.log('loadScheduleFor: loaded', (data||[]).length, 'rows');
+  const map = {};
+  (data || []).forEach(r => {
+    (map[r.vessel_code] = map[r.vessel_code] || [])
+      .push(r);
+  });
+  return map;
+}
+
+async function loadDocks() {
+  const { data, error } = await sb
+    .from('docks').select('*')
+    .order('start_date');
+  if (error) {
+    console.error('docks load error:', error);
+    return [];
+  }
+  return data || [];
+}
+
+async function loadFavorites(email) {
+  if (!email) return { ship: [], port: [] };
+  const { data } = await sb
+    .from('favorites').select('*')
+    .eq('user_email', email);
+  const out = { ship: [], port: [] };
+  (data || []).forEach(r => {
+    out[r.fav_type] = r.items || [];
+  });
+  return out;
+}
+
+async function saveFavorites(email, type, items) {
+  await sb.from('favorites').upsert({
+    user_email: email,
+    fav_type: type,
+    items: items
+  }, { onConflict: 'user_email,fav_type' });
+}
+
+async function loadPendingUsers() {
+  const { data } = await sb
+    .from('users').select('*')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false });
+  return data || [];
+}
+
+async function loadRegisteredUsers() {
+  const { data } = await sb
+    .from('users').select('*')
+    .eq('status', 'active')
+    .order('name');
+  return data || [];
+}
+
+async function loadConfig() {
+  const { data } = await sb
+    .from('config').select('*');
+  const map = {};
+  (data || []).forEach(r => {
+    map[r.key] = r.value;
+  });
+  return map;
+}
+
+/* ==================================================
+   AUTH FUNCTIONS
+================================================== */
+async function doLogin(email, password) {
+  email = (email || '').trim().toLowerCase();
+  if (!email) return { error: '이메일을 입력해 주세요.' };
+  if (!password) return { error: '비밀번호를 입력해 주세요.' };
+
+  const hash = await hashPassword(password);
+  const { data: user, error } = await sb
+    .from('users').select('*')
+    .eq('email', email).single();
+
+  if (error || !user) {
+    return { error: '등록되지 않은 계정입니다.' };
+  }
+  if (user.status === 'pending') {
+    return { error: '관리자 승인 대기 중입니다.',
+      pending: true };
+  }
+  if (user.status === 'rejected') {
+    return { error: '접근이 거부된 계정입니다.' };
+  }
+  if (user.password_hash !== hash) {
+    return { error: '비밀번호가 일치하지 않습니다.' };
+  }
+  return { user };
+}
+
+async function doRegister(info) {
+  const { email, name, password, dept, purpose } = info;
+  if (!email || !name) {
+    return { error: '이메일과 이름은 필수입니다.' };
+  }
+  if (!password || password.length < 6) {
+    return {
+      error: '비밀번호는 6자 이상이어야 합니다.'
+    };
+  }
+  const hash = await hashPassword(password);
+  const { error } = await sb.from('users').insert({
+    email: email.toLowerCase().trim(),
+    name, dept: dept || '',
+    password_hash: hash,
+    role: 'user',
+    status: 'pending',
+    purpose: purpose || ''
+  });
+  if (error) {
+    if (error.code === '23505') {
+      return { error: '이미 등록된 이메일입니다.' };
+    }
+    return { error: '등록 중 오류: ' + error.message };
+  }
+  return { ok: true };
+}
+
+/* ==================================================
+   SCHEDULE PROCESSING
+================================================== */
+function processSchedule(rows) {
+  if (!rows || !rows.length) {
+    return { voyages: [], current: null, next: null };
+  }
+  // Group by voyage_no
+  const voyMap = {};
+  rows.forEach(r => {
+    const v = r.voyage_no || 'UNKNOWN';
+    (voyMap[v] = voyMap[v] || []).push(r);
+  });
+  // Sort voyages by earliest ETA
+  const voyages = Object.entries(voyMap)
+    .map(([vno, calls]) => {
+      calls.sort((a, b) =>
+        new Date(a.eta) - new Date(b.eta)
+      );
+      const firstEta = parseDate(calls[0].eta);
+      const lastEtd = parseDate(
+        calls[calls.length - 1].etd
+      );
+      return { voyage_no: vno, calls, firstEta, lastEtd };
+    })
+    .sort((a, b) => a.firstEta - b.firstEta);
+
+  // Find current voyage
+  const now = new Date();
+  let curIdx = -1;
+  for (let i = 0; i < voyages.length; i++) {
+    const v = voyages[i];
+    if (v.firstEta <= now &&
+        (!v.lastEtd || v.lastEtd >= now)) {
+      curIdx = i; break;
+    }
+  }
+  if (curIdx < 0) {
+    // Find next future voyage
+    curIdx = voyages.findIndex(
+      v => v.firstEta > now
+    );
+    if (curIdx > 0) curIdx--;
+    if (curIdx < 0) curIdx = voyages.length - 1;
+  }
+  const current = voyages[curIdx] || null;
+  const next = voyages[curIdx + 1] || null;
+
+  return { voyages, current, next };
+}
+
+function getShipStatus(schedule) {
+  if (!schedule || !schedule.current) {
+    return { label: '정보없음', color: '#97a2b5',
+      bg: '#eef1f6', icon: '—' };
+  }
+  const now = new Date();
+  const calls = schedule.current.calls;
+  // Find last arrived port
+  for (let i = calls.length - 1; i >= 0; i--) {
+    const c = calls[i];
+    if (c.arrival_status === 'A' &&
+        c.departure_status !== 'A') {
+      return { label: '접안중', color: '#0064B4',
+        bg: '#e8f1fb', icon: '⚓' };
+    }
+  }
+  return { label: '운항중', color: '#1b7a3d',
+    bg: '#e6f4ea', icon: '▶' };
+}
+
+function getCurrentPort(schedule) {
+  if (!schedule || !schedule.current) {
+    return { from: '', to: '', eta: null };
+  }
+  const now = new Date();
+  const calls = schedule.current.calls;
+  let idx = calls.findIndex(
+    c => parseDate(c.eta) > now
+  );
+  if (idx < 0) idx = calls.length - 1;
+  const from = idx > 0
+    ? portShort(calls[idx - 1].port_name)
+    : portShort(calls[0].port_name);
+  const to = portShort(calls[idx].port_name);
+  return { from, to, eta: parseDate(calls[idx].eta),
+    idx, calls };
+}
+
+/* ==================================================
+   RENDER FUNCTIONS
+================================================== */
+function render() {
+  try {
+    const app = document.getElementById('app');
+    if (!app) return;
+
+    // Save scroll + focus
+    const tc = document.getElementById('tab-content');
+    const scrollY = tc ? tc.scrollTop : 0;
+    const focused = document.activeElement;
+    const focusId = focused ? focused.id : null;
+    const focusTag = focused ? focused.tagName : null;
+    const selStart = focused && focused.selectionStart != null
+      ? focused.selectionStart : null;
+
+    app.innerHTML = '';
+    if (!state.loggedIn) {
+      renderLogin(app);
+    } else {
+      renderApp(app);
+    }
+
+    // Restore scroll
+    const tc2 = document.getElementById('tab-content');
+    if (tc2 && scrollY > 0) tc2.scrollTop = scrollY;
+
+    // Schedule body needs to be populated AFTER DOM is ready
+    if (state.loggedIn && state.activeTab === 'schedule') {
+      renderScheduleBody();
+    }
+
+    // Restore focus
+    if (focusId) {
+      const el = document.getElementById(focusId);
+      if (el) {
+        el.focus();
+        if (selStart != null && el.setSelectionRange) {
+          try { el.setSelectionRange(selStart, selStart); }
+          catch(e) {}
+        }
+      }
+    } else if (focusTag === 'INPUT' || focusTag === 'TEXTAREA') {
+      // Try to find by matching tag and value
+      const inputs = app.querySelectorAll('input,textarea');
+      for (const inp of inputs) {
+        if (inp.value === focused.value) {
+          inp.focus();
+          if (selStart != null && inp.setSelectionRange) {
+            try { inp.setSelectionRange(selStart, selStart); }
+            catch(e) {}
+          }
+          break;
+        }
+      }
+    }
+  } catch(e) {
+    console.error('Render error:', e);
+  }
+}
+
+/* ===== LOGIN SCREEN ===== */
+function renderLogin(app) {
+  const wrap = h('div', {className: 'login-bg'});
+
+  if (state.loginForm === 'login') {
+    const center = h('div', {className: 'login-center'});
+    // Icon
+    center.appendChild(
+      h('div', {className: 'login-icon'},
+        h('span', {style:{fontSize:'34px'}}, '\u{1F6A2}'))
+    );
+    center.appendChild(
+      h('div', {className: 'login-title'}, 'KMTC')
+    );
+    center.appendChild(
+      h('div', {className: 'login-sub'}, 'SCHEDULE')
+    );
+    center.appendChild(
+      h('div', {className: 'login-desc'},
+        '고려해운 선박 운항 스케줄')
+    );
+    // Form
+    const form = h('div', {style:{
+      width:'100%',marginTop:'42px',
+      display:'flex',flexDirection:'column',gap:'12px'
+    }});
+    const emailInput = h('input', {
+      className: 'login-input',
+      type: 'email',
+      placeholder: '이메일',
+      value: state.loginEmail
+    });
+    emailInput.addEventListener('input', e => {
+      state.loginEmail = e.target.value;
+    });
+    const pwInput = h('input', {
+      className: 'login-input',
+      type: 'password',
+      placeholder: '비밀번호',
+      value: state.loginPassword
+    });
+    pwInput.addEventListener('input', e => {
+      state.loginPassword = e.target.value;
+    });
+    pwInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleLogin();
+    });
+    form.appendChild(emailInput);
+    form.appendChild(pwInput);
+
+    if (state.loginError) {
+      form.appendChild(
+        h('div', {className: 'login-error'},
+          state.loginError)
+      );
+    }
+    const btn = h('button', {
+      className: 'login-btn',
+      onClick: handleLogin
+    }, '로그인');
+    form.appendChild(btn);
+    center.appendChild(form);
+
+    // Links
+    center.appendChild(
+      h('div', {style:{marginTop:'18px',
+        textAlign:'center'}},
+        h('a', {style:{fontSize:'13px',
+          color:'#cfe0f5',cursor:'pointer',
+          textDecoration:'underline'},
+          onClick: () => {
+            state.loginForm = 'forgot';
+            state.forgotMsg = '';
+            state.forgotErr = '';
+            render();
+          }
+        }, '비밀번호를 잊으셨나요?')
+      )
+    );
+    center.appendChild(
+      h('div', {style:{marginTop:'12px',
+        textAlign:'center'}}, [
+        h('span', {style:{fontSize:'13px',
+          color:'#a9c2e2'}}, '계정이 없으신가요? '),
+        h('a', {style:{fontSize:'13px',color:'#fff',
+          fontWeight:'600',cursor:'pointer',
+          textDecoration:'underline'},
+          onClick: () => {
+            state.loginForm = 'register';
+            state.regError = '';
+            render();
+          }
+        }, '계정 신청하기')
+      ])
+    );
+    wrap.appendChild(center);
+
+  } else if (state.loginForm === 'register') {
+    const sec = h('div', {style:{
+      flex:'1',display:'flex',flexDirection:'column',
+      justifyContent:'center',minHeight:'600px',
+      padding:'40px 0'
+    }});
+    sec.appendChild(
+      h('div', {style:{fontSize:'14px',
+        color:'#bcd3ee',cursor:'pointer',
+        marginBottom:'18px'},
+        onClick: () => {
+          state.loginForm = 'login';
+          render();
+        }
+      }, '\u2039 로그인으로')
+    );
+    sec.appendChild(
+      h('div', {style:{fontSize:'24px',
+        fontWeight:'800',color:'#fff'}},
+        '계정 신청')
+    );
+    sec.appendChild(
+      h('div', {style:{fontSize:'13px',
+        color:'#a9c2e2',marginTop:'6px'}},
+        '관리자 승인 후 이용하실 수 있습니다.')
+    );
+    const form = h('div', {style:{
+      width:'100%',marginTop:'26px',
+      display:'flex',flexDirection:'column',gap:'12px'
+    }});
+    const fields = [
+      ['reqEmail','이메일 (@ekmtc.com)','email'],
+      ['reqName','이름','text'],
+      ['regPassword','비밀번호 (6자 이상)','password'],
+      ['regPasswordConfirm','비밀번호 확인','password'],
+      ['reqDept','부서','text']
+    ];
+    fields.forEach(([key, ph, type]) => {
+      const inp = h('input', {
+        className: 'login-input',
+        type, placeholder: ph,
+        value: state[key] || ''
+      });
+      inp.addEventListener('input', e => {
+        state[key] = e.target.value;
+      });
+      form.appendChild(inp);
+    });
+    const ta = h('textarea', {style:{
+      height:'92px',borderRadius:'14px',
+      border:'1px solid rgba(255,255,255,.22)',
+      background:'rgba(255,255,255,.10)',
+      padding:'12px 16px',fontSize:'14px',
+      color:'#fff',outline:'none',resize:'none',
+      fontFamily:'var(--font)',width:'100%'
+    }, placeholder:'사용 목적을 간단히 적어주세요'});
+    ta.value = state.regPurpose || '';
+    ta.addEventListener('input', e => {
+      state.regPurpose = e.target.value;
+    });
+    form.appendChild(ta);
+    if (state.regError) {
+      form.appendChild(
+        h('div', {className:'login-error'},
+          state.regError)
+      );
+    }
+    form.appendChild(
+      h('button', {className:'login-btn',
+        onClick: handleRegister}, '신청 제출')
+    );
+    sec.appendChild(form);
+    wrap.appendChild(sec);
+
+  } else if (state.loginForm === 'forgot') {
+    const sec = h('div', {style:{
+      flex:'1',display:'flex',flexDirection:'column',
+      justifyContent:'center',minHeight:'600px',
+      padding:'40px 0'
+    }});
+    sec.appendChild(
+      h('div', {style:{fontSize:'14px',
+        color:'#bcd3ee',cursor:'pointer',
+        marginBottom:'18px'},
+        onClick: () => {
+          state.loginForm = 'login'; render();
+        }
+      }, '\u2039 로그인으로')
+    );
+    sec.appendChild(
+      h('div', {style:{fontSize:'24px',
+        fontWeight:'800',color:'#fff'}},
+        '비밀번호 찾기')
+    );
+    sec.appendChild(
+      h('div', {style:{fontSize:'13px',
+        color:'#a9c2e2',marginTop:'6px'}},
+        '가입한 이메일로 임시 비밀번호를 보내드립니다.')
+    );
+    const form = h('div', {style:{
+      width:'100%',marginTop:'26px',
+      display:'flex',flexDirection:'column',gap:'12px'
+    }});
+    const inp = h('input', {
+      className: 'login-input',
+      type: 'email',
+      placeholder: '이메일 (@ekmtc.com)',
+      value: state.forgotEmail
+    });
+    inp.addEventListener('input', e => {
+      state.forgotEmail = e.target.value;
+    });
+    form.appendChild(inp);
+    if (state.forgotErr) {
+      form.appendChild(
+        h('div', {className:'login-error'},
+          state.forgotErr)
+      );
+    }
+    if (state.forgotMsg) {
+      form.appendChild(
+        h('div', {style:{
+          fontSize:'13px',color:'#b6f0c8',
+          background:'rgba(53,208,127,.12)',
+          border:'1px solid rgba(53,208,127,.3)',
+          borderRadius:'12px',padding:'12px 14px',
+          lineHeight:'1.5'
+        }}, '\u2709\uFE0F ' + state.forgotMsg)
+      );
+    }
+    form.appendChild(
+      h('button', {className:'login-btn',
+        onClick: handleForgot},
+        '임시 비밀번호 발송')
+    );
+    sec.appendChild(form);
+    wrap.appendChild(sec);
+  }
+
+  app.appendChild(wrap);
+}
+
+async function handleLogin() {
+  const res = await doLogin(
+    state.loginEmail, state.loginPassword
+  );
+  if (res.error) {
+    state.loginError = res.error;
+    render();
+    return;
+  }
+  state.user = res.user;
+  state.loggedIn = true;
+  state.loginError = '';
+  try {
+    localStorage.setItem(
+      'kmtc_session', JSON.stringify(res.user)
+    );
+  } catch(e) {}
+  render();
+  await initAppData();
+}
+
+async function handleRegister() {
+  // Password match check
+  if (state.regPassword !== state.regPasswordConfirm) {
+    state.loginError = '비밀번호가 일치하지 않습니다.';
+    render();
+    return;
+  }
+  const res = await doRegister({
+    email: state.reqEmail,
+    name: state.reqName,
+    password: state.regPassword,
+    dept: state.reqDept,
+    purpose: state.regPurpose
+  });
+  if (res.error) {
+    state.regError = res.error;
+    render();
+    return;
+  }
+  state.loginForm = 'login';
+  state.loginError = '';
+  showToast('계정 신청이 완료되었습니다. 관리자 승인을 기다려주세요.');
+  render();
+}
+
+async function handleForgot() {
+  const em = (state.forgotEmail||'').trim().toLowerCase();
+  if (!em || !em.includes('@')) {
+    state.forgotErr = '올바른 이메일을 입력해주세요.';
+    state.forgotMsg = '';
+    render();
+    return;
+  }
+  // In real app, would call an edge function
+  state.forgotErr = '';
+  state.forgotMsg =
+    em + '로 임시 비밀번호를 발송했습니다. '
+    + '로그인 후 설정에서 변경하세요.';
+  render();
+}
+
+function handleLogout() {
+  state.loggedIn = false;
+  state.user = null;
+  state.ships = [];
+  state.schedules = {};
+  state.favorites = { ship: [], port: [] };
+  try {
+    localStorage.removeItem('kmtc_session');
+  } catch(e) {}
+  render();
+}
+
+/* ===== MAIN APP ===== */
+function renderApp(app) {
+  const main = h('div', {
+    id: 'app-main',
+    style: {
+      display: 'flex', flexDirection: 'column',
+      height: '100%', minHeight: '0',
+      position: 'relative'
+    }
+  });
+
+  // Loading indicator
+  if (state.loading) {
+    main.appendChild(
+      h('div', {className: 'sync-spinner'},
+        h('div', {className: 'sync-pill'}, [
+          h('span', {
+            className: 'sync-ring kspin'
+          }),
+          '동기화 중\u2026'
+        ])
+      )
+    );
+  }
+
+  // Tab content
+  const content = h('div', {
+    className: 'tab-content',
+    id: 'tab-content'
+  });
+
+  switch (state.activeTab) {
+    case 'schedule': renderScheduleTab(content); break;
+    case 'dock': renderDockTab(content); break;
+    case 'port': renderPortTab(content); break;
+    case 'settings': renderSettingsTab(content); break;
+  }
+  main.appendChild(content);
+
+  // Bottom tab bar
+  const bar = h('div', {className: 'tab-bar'});
+  const tabs = [
+    { id:'schedule', icon:'\u{1F6A2}', label:'스케줄' },
+    { id:'dock', icon:'\u{1F527}', label:'입거' },
+    { id:'port', icon:'\u{1F50D}', label:'항구' },
+    { id:'settings', icon:'\u2699\uFE0F', label:'설정' }
+  ];
+  tabs.forEach(t => {
+    const active = state.activeTab === t.id;
+    const item = h('div', {
+      className:
+        'tab-bar-item' + (active ? ' active' : ''),
+      onClick: () => {
+        state.activeTab = t.id;
+        render();
+      }
+    }, [
+      h('span', {className:'icon',
+        style:{
+          opacity: active ? '1' : '0.5',
+          filter: active ? 'none' : 'grayscale(0.5)'
+        }
+      }, t.icon),
+      h('span', {className:'label'}, t.label)
+    ]);
+    bar.appendChild(item);
+  });
+  main.appendChild(bar);
+  app.appendChild(main);
+}
+
+/* ==================================================
+   SCHEDULE TAB
+================================================== */
+function renderScheduleTab(container) {
+  const header = h('div', {className: 'tab-header'});
+
+  // Title area
+  header.appendChild(
+    h('div', {style:{
+      display:'flex',alignItems:'baseline',gap:'7px'
+    }}, [
+      h('span', {style:{
+        fontFamily:'Inter',fontWeight:'800',
+        fontSize:'20px',letterSpacing:'0.5px',
+        lineHeight:'1'
+      }}, 'KMTC'),
+      h('span', {style:{
+        fontFamily:'Inter',fontSize:'20px',
+        fontWeight:'600',letterSpacing:'1px',
+        lineHeight:'1',color:'#a9c8ee'
+      }}, 'SCHEDULE')
+    ])
+  );
+
+  // Stats line
+  const favCount = state.favorites.ship.length;
+  const total = state.ships.length;
+  header.appendChild(
+    h('div', {style:{
+      marginTop:'4px',fontSize:'11.5px',
+      color:'#a9c8ee',display:'flex',
+      alignItems:'center',gap:'6px'
+    }}, [
+      h('span', {style:{
+        width:'6px',height:'6px',borderRadius:'50%',
+        background:'#35d07f',display:'inline-block'
+      }}),
+      `${fmtShort(parseDate(state.lastUpdate))} 업데이트 \xB7 `
+      + `즐겨찾기 ${favCount}척 \xB7 전체 ${total}척`
+    ])
+  );
+
+  // Search bar
+  const searchBox = h('div', {
+    className: 'search-box',
+    style: { marginTop: '12px' }
+  });
+  searchBox.appendChild(
+    h('span', {style:{opacity:'0.8'}}, '\u{1F50D}')
+  );
+  const searchInp = h('input', {
+    id: 'sched-search',
+    placeholder:
+      '선명 또는 코드 검색 (예: KPS, PUSAN)',
+    value: state.schedQuery
+  });
+  searchInp.addEventListener('input', e => {
+    state.schedQuery = e.target.value;
+    renderScheduleBody();
+  });
+  searchBox.appendChild(searchInp);
+  if (state.schedQuery || state.dateFrom
+      || state.dateTo) {
+    const clearBtn = h('span', {
+      className: 'clear-x',
+      onClick: () => {
+        state.schedQuery = '';
+        state.dateFrom = '';
+        state.dateTo = '';
+        render();
+      }
+    }, '\u2715');
+    searchBox.appendChild(clearBtn);
+  }
+  header.appendChild(searchBox);
+
+  // Date range
+  const dateRow = h('div', {style:{
+    marginTop:'8px',display:'flex',
+    alignItems:'center',gap:'8px'
+  }});
+  const dateBox = (val, key) => {
+    const box = h('div', {style:{
+      flex:'1',display:'flex',alignItems:'center',
+      gap:'6px',
+      background:'rgba(255,255,255,.12)',
+      border:'1px solid rgba(255,255,255,.18)',
+      borderRadius:'11px',padding:'0 10px',
+      height:'38px'
+    }});
+    if (key === 'dateFrom') {
+      box.appendChild(
+        h('span', {style:{fontSize:'10px',
+          color:'#a9c8ee'}}, '기간')
+      );
+    }
+    const inp = h('input', {
+      type: 'date', value: val,
+      style: {
+        flex:'1',border:'none',
+        background:'transparent',outline:'none',
+        color:'#fff',fontSize:'12px',
+        fontFamily:'Inter'
+      }
+    });
+    inp.addEventListener('change', e => {
+      state[key] = e.target.value;
+      renderScheduleBody();
+    });
+    box.appendChild(inp);
+    return box;
+  };
+  dateRow.appendChild(dateBox(state.dateFrom, 'dateFrom'));
+  dateRow.appendChild(
+    h('span', {style:{color:'#a9c8ee'}}, '~')
+  );
+  dateRow.appendChild(dateBox(state.dateTo, 'dateTo'));
+  header.appendChild(dateRow);
+
+  container.appendChild(header);
+
+  // Body
+  const body = h('div', {
+    id: 'schedule-body',
+    style: { padding: '14px 16px 20px' }
+  });
+  container.appendChild(body);
+  renderScheduleBody();
+}
+
+function renderScheduleBody() {
+  const body = document.getElementById('schedule-body');
+  if (!body) return;
+  body.innerHTML = '';
+
+  // If ships not loaded yet, show loading message
+  if (!state.ships.length) {
+    body.appendChild(
+      h('div', {style:{
+        padding:'40px 20px',textAlign:'center',
+        color:'var(--muted)',fontSize:'13px'
+      }}, '선박 목록 로딩 중...')
+    );
+    return;
+  }
+
+  const q = (state.schedQuery || '').trim().toUpperCase();
+  const isFiltering = !!(q || state.dateFrom
+    || state.dateTo);
+
+  if (isFiltering) {
+    // Filtered search results
+    let results = state.ships.filter(ship => {
+      if (q) {
+        const code = (ship.code || '').toUpperCase();
+        const name = (ship.name || '').toUpperCase();
+        if (!code.includes(q) && !name.includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // TODO: date range filtering on schedule data
+    // For now, filter ships that have schedules in range
+    if (state.dateFrom || state.dateTo) {
+      const fromT = state.dateFrom
+        ? new Date(state.dateFrom + 'T00:00:00') : null;
+      const toT = state.dateTo
+        ? new Date(state.dateTo + 'T23:59:59') : null;
+      results = results.filter(ship => {
+        const rows = state.schedules[ship.code];
+        if (!rows) return false;
+        return rows.some(r => {
+          const eta = parseDate(r.eta);
+          if (!eta) return false;
+          if (fromT && eta < fromT) return false;
+          if (toT && eta > toT) return false;
+          return true;
+        });
+      });
+    }
+
+    body.appendChild(
+      h('div', {className: 'section-label'},
+        `검색 결과 ${results.length}척`
+        + (state.dateFrom || state.dateTo
+          ? ` \xB7 ${state.dateFrom||'\u2026'}`
+            + ` ~ ${state.dateTo||'\u2026'}`
+          : ''))
+    );
+
+    if (!results.length) {
+      body.appendChild(
+        h('div', {style:{
+          background:'var(--card)',borderRadius:'14px',
+          border:'1px solid var(--cardbr)',
+          padding:'22px',textAlign:'center',
+          fontSize:'13px',color:'var(--muted)'
+        }}, '해당 조건의 선박이 없습니다.')
+      );
+    } else {
+      results.forEach(ship => {
+        body.appendChild(renderShipCard(ship));
+      });
+    }
+  } else {
+    // Default: favorites
+    body.appendChild(
+      h('div', {className: 'section-label'},
+        '\u2B50 내 즐겨찾기 선박')
+    );
+
+    const favCodes = state.favorites.ship;
+    const favShips = favCodes
+      .map(c => state.ships.find(s => s.code === c))
+      .filter(Boolean);
+
+    if (favShips.length) {
+      favShips.forEach(ship => {
+        body.appendChild(renderShipCard(ship));
+      });
+    } else {
+      body.appendChild(
+        h('div', {style:{
+          background:'var(--card)',borderRadius:'14px',
+          border:'1px dashed var(--cardbr)',
+          padding:'26px 18px',textAlign:'center'
+        }}, [
+          h('div', {style:{fontSize:'30px',marginBottom:'8px'}}, '\u2B50'),
+          h('div', {style:{
+            fontSize:'13px',color:'var(--muted)',lineHeight:'1.5'
+          }}, '즐겨찾기한 선박이 없습니다.\n검색 또는 아래 목록에서 ☆를 눌러 추가하세요.')
+        ])
+      );
+    }
+
+    // KMTC / SUNNY fleet tabs
+    const favSet = new Set(favCodes);
+    // fleetTab can be 'KMTC', 'SUNNY', or null (collapsed)
+
+    const tabRow = h('div', {style:{
+      display:'flex',gap:'8px',marginTop:'18px',marginBottom:'12px'
+    }});
+    ['KMTC','SUNNY'].forEach(tab => {
+      const active = state.fleetTab === tab;
+      tabRow.appendChild(
+        h('div', {
+          style:{
+            flex:'1',textAlign:'center',fontSize:'13px',
+            fontWeight:'700',padding:'9px 0',
+            borderRadius:'10px',cursor:'pointer',
+            color: active ? '#fff' : 'var(--ink2)',
+            background: active ? 'var(--primary)' : 'var(--card)',
+            border: '1px solid ' + (active ? 'var(--primary)' : 'var(--cardbr)')
+          },
+          onClick: () => {
+            // Toggle: same tab → collapse, different → switch
+            if (state.fleetTab === tab) {
+              state.fleetTab = null; // collapse
+            } else {
+              state.fleetTab = tab;
+            }
+            renderScheduleBody();
+          }
+        }, tab)
+      );
+    });
+    body.appendChild(tabRow);
+
+    // Fleet ships (only show when a tab is selected)
+    if (state.fleetTab) {
+      const isKmtc = s => s.code && s.code.startsWith('K');
+      const isSunny = s => s.code && !s.code.startsWith('K');
+      const fleetShips = state.ships
+        .filter(s => state.fleetTab === 'KMTC' ? isKmtc(s) : isSunny(s))
+        .filter(s => !favSet.has(s.code));
+
+      if (fleetShips.length) {
+        fleetShips.forEach(ship => {
+          body.appendChild(renderShipCard(ship));
+        });
+      }
+    }
+  }
+}
+
+/* ===== SHIP CARD ===== */
+function renderShipCard(ship) {
+  const code = ship.code;
+  const color = groupColor(ship);
+  const isFav = state.favorites.ship.includes(code);
+  const rows = state.schedules[code];
+  const schedule = processSchedule(rows);
+  const status = getShipStatus(schedule);
+  const portInfo = getCurrentPort(schedule);
+
+  const card = h('div', {className: 'ship-card'});
+
+  // Collapsed row
+  const row = h('div', {
+    className: 'ship-card-row',
+    onClick: async () => {
+      if (state.expanded === code) {
+        state.expanded = null;
+      } else {
+        state.expanded = code;
+        if (!state.schedules[code]) {
+          const map = await loadScheduleFor([code]);
+          Object.assign(state.schedules, map);
+        }
+      }
+      renderScheduleBody();
+    }
+  });
+
+  // Color bar
+  row.appendChild(
+    h('div', {className: 'ship-color-bar',
+      style: { background: color }})
+  );
+
+  // Body
+  const body = h('div', {className: 'ship-card-body'});
+  const topRow = h('div', {style:{
+    display:'flex',alignItems:'center',gap:'9px'
+  }});
+  topRow.appendChild(
+    h('span', {className: 'ship-code'}, code)
+  );
+
+  // Route info
+  const routeDiv = h('div', {style:{
+    flex:'1',minWidth:'0',display:'flex',
+    alignItems:'baseline',gap:'6px'
+  }});
+  if (portInfo.from && portInfo.to) {
+    const routeSpan = h('span', {
+      className: 'ship-route',
+      title: portInfo.from + ' \u2192 ' + portInfo.to
+    }, [
+      portInfo.from.slice(0, 3),
+      h('span', {style:{color: color}}, '\u2192'),
+      portInfo.to.slice(0, 3)
+    ]);
+    routeDiv.appendChild(routeSpan);
+    if (portInfo.eta) {
+      routeDiv.appendChild(
+        h('span', {className: 'ship-eta-short'},
+          fmtDateOnly(portInfo.eta))
+      );
+    }
+  } else {
+    routeDiv.appendChild(
+      h('span', {style:{fontSize:'12px',
+        color:'var(--muted)'}},
+        ship.name || '')
+    );
+  }
+  topRow.appendChild(routeDiv);
+
+  // Status badge
+  topRow.appendChild(
+    h('span', {className: 'ship-status',
+      style: {
+        color: status.color,
+        background: status.bg
+      }
+    }, [
+      h('span', {style:{fontSize:'8px'}}, status.icon),
+      status.label
+    ])
+  );
+
+  // Star
+  topRow.appendChild(
+    h('span', {
+      className: 'ship-star',
+      style: { color: isFav ? '#f6a623' : '#c3ccda' },
+      onClick: async (e) => {
+        e.stopPropagation();
+        await toggleShipFav(code);
+      }
+    }, isFav ? '\u2605' : '\u2606')
+  );
+
+  body.appendChild(topRow);
+  row.appendChild(body);
+  card.appendChild(row);
+
+  // Expanded panel
+  if (state.expanded === code) {
+    card.appendChild(
+      renderShipExpand(ship, schedule, color)
+    );
+  }
+
+  return card;
+}
+
+function renderShipExpand(ship, schedule, color) {
+  const code = ship.code;
+  const panel = h('div', {className: 'ship-expand'});
+
+  // Spec toggle
+  const showSpec = state.showSpec[code];
+  const specHeader = h('div', {style:{
+    display:'flex',alignItems:'center',
+    justifyContent:'space-between',cursor:'pointer',
+    marginBottom:'12px'
+  }, onClick: () => {
+    state.showSpec[code] = !state.showSpec[code];
+    render();
+  }});
+  specHeader.appendChild(
+    h('span', {style:{fontSize:'11px',fontWeight:'700',
+      color:'#7d8aa0',letterSpacing:'0.3px'}},
+      '선박 상세 정보')
+  );
+  specHeader.appendChild(
+    h('span', {style:{fontSize:'11px',
+      color:'#9aa5b6'}},
+      showSpec ? '\u25B2' : '\u25BE')
+  );
+  panel.appendChild(specHeader);
+
+  if (showSpec) {
+    const grid = h('div', {className: 'spec-grid'});
+    const specs = [
+      ['IMO No.', ship.imo || '-'],
+      ['SIZE TYPE', ship.size_type || '-'],
+      ['건조년', ship.built || '-'],
+      ['DWT', numFmt(ship.dwt)],
+      ['GT', numFmt(ship.gt)],
+      ['기국', ship.flag || '-']
+    ];
+    specs.forEach(([lbl, val]) => {
+      grid.appendChild(
+        h('div', {className: 'spec-item'}, [
+          h('div', {className: 'spec-label'}, lbl),
+          h('div', {className: 'spec-val'}, String(val))
+        ])
+      );
+    });
+    panel.appendChild(grid);
+  }
+
+  // Route badge
+  if (ship.route_key) {
+    panel.appendChild(
+      h('div', {style:{
+        display:'flex',alignItems:'center',gap:'6px',
+        marginBottom:'12px'
+      }}, [
+        h('span', {style:{fontSize:'11px',
+          color:'var(--ink3)'}}, '투입 항로'),
+        h('span', {className: 'route-badge'},
+          ship.route_key)
+      ])
+    );
+  }
+
+  // Voyage tabs
+  const voyTab = state.voyTab[code] || 'cur';
+  const tabsDiv = h('div', {className: 'voy-tabs'});
+  const curVoy = schedule.current
+    ? schedule.current.voyage_no : '-';
+  const nextVoy = schedule.next
+    ? schedule.next.voyage_no : '-';
+  tabsDiv.appendChild(
+    h('div', {
+      className: 'voy-tab'
+        + (voyTab === 'cur' ? ' active' : ''),
+      onClick: () => {
+        state.voyTab[code] = 'cur'; render();
+      }
+    }, '현재 ' + curVoy)
+  );
+  tabsDiv.appendChild(
+    h('div', {
+      className: 'voy-tab'
+        + (voyTab === 'next' ? ' active' : ''),
+      onClick: () => {
+        state.voyTab[code] = 'next'; render();
+      }
+    }, '다음 ' + nextVoy)
+  );
+  panel.appendChild(tabsDiv);
+
+  // Port call header
+  const portHeader = h('div', {style:{
+    display:'flex',alignItems:'center',
+    justifyContent:'space-between',marginBottom:'10px'
+  }});
+  portHeader.appendChild(
+    h('span', {style:{fontSize:'11px',fontWeight:'700',
+      color:'#7d8aa0'}}, '기항지')
+  );
+  portHeader.appendChild(
+    h('div', {style:{
+      display:'flex',gap:'14px',
+      fontFamily:'Inter',fontSize:'10px',
+      fontWeight:'700',color:'#b3bccb'
+    }}, [
+      h('span', {style:{width:'82px',
+        textAlign:'right'}}, 'ETA'),
+      h('span', {style:{width:'82px',
+        textAlign:'right'}}, 'ETD')
+    ])
+  );
+  panel.appendChild(portHeader);
+
+  // Port call list
+  const voyage = voyTab === 'next'
+    ? schedule.next : schedule.current;
+  if (voyage && voyage.calls) {
+    const now = new Date();
+    voyage.calls.forEach((call, i) => {
+      const eta = parseDate(call.eta);
+      const etd = parseDate(call.etd);
+      const isSkip = call.skip;
+      const isCurrent = eta && eta > now
+        && (i === 0 || parseDate(
+          voyage.calls[i-1].etd) <= now);
+      const isPast = eta && eta <= now;
+
+      const portCall = h('div', {
+        className: 'port-call'
+      });
+
+      // Dot
+      let dotBg, dotBorder;
+      if (isSkip) {
+        dotBg = '#c0392b';
+        dotBorder = '#c0392b';
+      } else if (isCurrent) {
+        dotBg = color;
+        dotBorder = color;
+      } else if (isPast) {
+        dotBg = '#c3ccda';
+        dotBorder = '#c3ccda';
+      } else {
+        dotBg = '#fff';
+        dotBorder = '#c3ccda';
+      }
+      portCall.appendChild(
+        h('div', {className: 'port-dot',
+          style: {
+            background: dotBg,
+            border: '2px solid ' + dotBorder
+          }
+        })
+      );
+
+      // Info
+      const info = h('div', {className: 'port-info'});
+      let label = portShort(call.port_name);
+      if (call.terminal) {
+        // Show only terminal code (first word), not full name
+        const tCode = call.terminal.split(' ')[0];
+        if (tCode) label += ' (' + tCode + ')';
+      }
+      info.appendChild(
+        h('span', {className: 'port-name',
+          style: {
+            fontWeight: isCurrent ? '800' : '500',
+            color: isSkip ? '#c0392b'
+              : isCurrent ? '#0b4f96'
+              : isPast ? '#a3adbd'
+              : 'var(--ink2)',
+            textDecoration: isSkip
+              ? 'line-through' : 'none'
+          }
+        }, label)
+      );
+      const times = h('div', {className: 'port-times'});
+      times.appendChild(
+        h('span', {className: 'port-time'},
+          eta ? fmtShort(eta) : '-')
+      );
+      times.appendChild(
+        h('span', {className: 'port-time',
+          style: { color: '#a3adbd' }},
+          etd ? fmtShort(etd) : '-')
+      );
+      info.appendChild(times);
+      portCall.appendChild(info);
+      panel.appendChild(portCall);
+    });
+  } else {
+    panel.appendChild(
+      h('div', {style:{
+        fontSize:'13px',color:'var(--muted)',
+        textAlign:'center',padding:'20px 0'
+      }}, '스케줄 데이터가 없습니다.')
+    );
+  }
+
+  return panel;
+}
+
+async function toggleShipFav(code) {
+  const favs = state.favorites.ship;
+  const idx = favs.indexOf(code);
+  if (idx >= 0) {
+    const ok = await showConfirm(
+      code + ' 선박을 즐겨찾기에서 해제하시겠습니까?'
+    );
+    if (!ok) return;
+    favs.splice(idx, 1);
+  } else {
+    favs.push(code);
+    showToast(code + ' 즐겨찾기 추가');
+  }
+  state.favorites.ship = [...favs];
+  if (state.user) {
+    saveFavorites(
+      state.user.email, 'ship', state.favorites.ship
+    );
+  }
+  render();
+}
+
+/* ==================================================
+   DOCK TAB
+================================================== */
+function renderDockTab(container) {
+  const header = h('div', {className: 'tab-header'});
+
+  const titleRow = h('div', {style:{
+    display:'flex',alignItems:'center',
+    justifyContent:'space-between'
+  }});
+  titleRow.appendChild(
+    h('div', {style:{fontSize:'19px',fontWeight:'700'}},
+      '\u{1F527} 도크 입거')
+  );
+
+  // List / Calendar toggle
+  const viewToggle = h('div', {style:{
+    display:'flex',background:'rgba(255,255,255,.14)',
+    borderRadius:'9px',padding:'3px'
+  }});
+  ['list', 'calendar'].forEach(v => {
+    const active = state.dockView === v;
+    viewToggle.appendChild(
+      h('span', {style:{
+        fontSize:'12px',fontWeight:'600',
+        padding:'5px 11px',borderRadius:'7px',
+        cursor:'pointer',
+        color: active ? '#023a76' : '#fff',
+        background: active
+          ? 'rgba(255,255,255,.9)' : 'transparent'
+      }, onClick: () => {
+        state.dockView = v; render();
+      }}, v === 'list' ? '리스트' : '캘린더')
+    );
+  });
+  titleRow.appendChild(viewToggle);
+  header.appendChild(titleRow);
+
+  // Stats
+  const currentCount = state.docks.filter(
+    d => isDockCurrent(d)).length;
+  const upcomingCount = state.docks.filter(
+    d => isDockUpcoming(d)).length;
+  header.appendChild(
+    h('div', {style:{marginTop:'4px',fontSize:'11.5px',
+      color:'#a9c8ee'}},
+      `진행중 ${currentCount}척 \xB7 `
+      + `예정 ${upcomingCount}건`)
+  );
+
+  // Search
+  const searchBox = h('div', {
+    className: 'search-box',
+    style: { marginTop: '12px' }
+  });
+  searchBox.appendChild(
+    h('span', {style:{opacity:'0.8'}}, '\u{1F50D}')
+  );
+  const inp = h('input', {
+    id: 'dock-search',
+    placeholder: '선명 또는 코드 검색',
+    value: state.dockQuery
+  });
+  inp.addEventListener('input', e => {
+    state.dockQuery = e.target.value;
+    render();
+  });
+  searchBox.appendChild(inp);
+  if (state.dockQuery) {
+    searchBox.appendChild(
+      h('span', {className:'clear-x', onClick: () => {
+        state.dockQuery = ''; render();
+      }}, '\u2715')
+    );
+  }
+  header.appendChild(searchBox);
+  container.appendChild(header);
+
+  // Body
+  const body = h('div', {style:{padding:'16px'}});
+
+  const dq = (state.dockQuery||'').trim().toUpperCase();
+
+  if (dq) {
+    // Search results
+    const results = state.docks.filter(d => {
+      const c = (d.code||'').toUpperCase();
+      const n = (d.name||'').toUpperCase();
+      return c.includes(dq) || n.includes(dq);
+    });
+    body.appendChild(
+      h('div', {className:'section-label'},
+        `검색 결과 ${results.length}건`)
+    );
+    results.forEach(d => {
+      body.appendChild(renderDockItem(d));
+    });
+  } else if (state.dockView === 'list') {
+    // Current
+    const current = state.docks
+      .filter(d => isDockCurrent(d));
+    if (current.length) {
+      body.appendChild(
+        h('div', {className:'section-label',
+          style:{color:'#c25d00',display:'flex',
+            alignItems:'center',gap:'6px'}
+        }, [
+          h('span', {style:{width:'7px',height:'7px',
+            borderRadius:'50%',background:'#ee7c1a',
+            display:'inline-block'}}),
+          '입거 진행중'
+        ])
+      );
+      current.forEach(d => {
+        body.appendChild(renderDockItem(d, 'current'));
+      });
+    }
+
+    // Upcoming
+    const upcoming = state.docks
+      .filter(d => isDockUpcoming(d))
+      .sort((a, b) =>
+        new Date(a.start_date) - new Date(b.start_date)
+      );
+    body.appendChild(
+      h('div', {className:'section-label',
+        style:{marginTop: current.length ? '22px' : '0',
+          display:'flex',alignItems:'center',gap:'6px'}
+      }, [
+        h('span', {style:{width:'7px',height:'7px',
+          borderRadius:'50%',background:'#0064B4',
+          display:'inline-block'}}),
+        '입거 예정 (가까운 순)'
+      ])
+    );
+    if (!upcoming.length) {
+      body.appendChild(
+        h('div', {style:{
+          background:'var(--card)',borderRadius:'14px',
+          border:'1px solid var(--cardbr)',
+          padding:'22px',textAlign:'center',
+          fontSize:'13px',color:'var(--muted)'
+        }}, '예정된 입거 일정이 없습니다.')
+      );
+    }
+    upcoming.forEach(d => {
+      body.appendChild(renderDockItem(d, 'upcoming'));
+    });
+
+    // Past
+    const past = state.docks
+      .filter(d => isDockPast(d))
+      .sort((a, b) =>
+        new Date(b.start_date) - new Date(a.start_date)
+      );
+    if (past.length) {
+      body.appendChild(
+        h('div', {className:'section-label',
+          style:{marginTop:'22px'}},
+          '\u{1F6E0} 완료된 입거')
+      );
+      past.forEach(d => {
+        body.appendChild(renderDockItem(d, 'past'));
+      });
+    }
+  } else {
+    // Calendar view - group by year/month
+    renderDockCalendar(body);
+  }
+
+  container.appendChild(body);
+}
+
+function isDockCurrent(d) {
+  const now = new Date();
+  const s = new Date(d.start_date);
+  const e = new Date(d.end_date);
+  return s <= now && e >= now;
+}
+function isDockUpcoming(d) {
+  const now = new Date();
+  return new Date(d.start_date) > now;
+}
+function isDockPast(d) {
+  return new Date(d.end_date) < new Date();
+}
+
+function renderDockItem(d, phase) {
+  if (!phase) {
+    const now = new Date();
+    const s = new Date(d.start_date);
+    const e = new Date(d.end_date);
+    phase = e < now ? 'past'
+      : s <= now ? 'current' : 'upcoming';
+  }
+  const s = new Date(d.start_date);
+  const e = new Date(d.end_date);
+  const days = Math.ceil((e - s) / 86400000) + 1;
+  const period = fmtFull(s).slice(0, 10) + ' ~ '
+    + fmtFull(e).slice(0, 10);
+
+  let badge, badgeColor, badgeBg;
+  if (phase === 'current') {
+    const rem = Math.max(0,
+      Math.ceil((e - new Date()) / 86400000));
+    badge = '진행중';
+    badgeColor = '#c25d00'; badgeBg = '#fff3e0';
+  } else if (phase === 'upcoming') {
+    const dd = Math.max(0,
+      Math.ceil((s - new Date()) / 86400000));
+    badge = 'D-' + dd;
+    badgeColor = dd <= 14 ? '#c25d00' : '#0064B4';
+    badgeBg = dd <= 14 ? '#fff3e0' : '#e8f1fb';
+  } else {
+    badge = '완료';
+    badgeColor = '#5b6a82'; badgeBg = '#eef1f6';
+  }
+
+  return h('div', {
+    className: 'dock-card'
+      + (phase === 'current' ? ' current' : '')
+  }, [
+    h('div', {style:{minWidth:'0'}}, [
+      h('div', {style:{
+        display:'flex',alignItems:'baseline',gap:'8px'
+      }}, [
+        h('span', {style:{fontFamily:'Inter',
+          fontWeight:'800',fontSize:'15px',
+          color:'var(--ink)'}}, d.code),
+        h('span', {style:{fontSize:'12px',
+          color:'var(--ink2)',fontWeight:'600',
+          fontFamily:'Inter'}}, period)
+      ]),
+      h('div', {style:{marginTop:'2px',fontSize:'11px',
+        color:'var(--ink3)'}},
+        '\u{1F4CD} ' + (d.yard||'') + ' \xB7 '
+        + (d.port||''))
+    ]),
+    h('span', {style:{
+      flex:'0 0 auto',fontFamily:'Inter',
+      fontSize: phase === 'upcoming' ? '13px' : '11px',
+      fontWeight: phase === 'upcoming' ? '800' : '700',
+      color: badgeColor, background: badgeBg,
+      padding:'5px 11px',borderRadius:'20px'
+    }}, badge)
+  ]);
+}
+
+function renderDockCalendar(body) {
+  // Group docks by year and month
+  const groups = {};
+  state.docks.forEach(d => {
+    if (isDockPast(d)) return;
+    const s = new Date(d.start_date);
+    const ym = s.getFullYear() + '-'
+      + String(s.getMonth() + 1).padStart(2, '0');
+    if (!groups[ym]) {
+      groups[ym] = {
+        year: s.getFullYear(),
+        month: s.getMonth() + 1,
+        items: []
+      };
+    }
+    groups[ym].items.push(d);
+  });
+
+  const sorted = Object.values(groups).sort((a, b) =>
+    (a.year - b.year) || (a.month - b.month)
+  );
+
+  // Group by year
+  const yearMap = {};
+  sorted.forEach(g => {
+    (yearMap[g.year] = yearMap[g.year] || []).push(g);
+  });
+
+  Object.entries(yearMap)
+    .sort((a, b) => a[0] - b[0])
+    .forEach(([yr, months]) => {
+      const total = months.reduce(
+        (s, m) => s + m.items.length, 0
+      );
+      const yearEl = h('div', {
+        style: { marginBottom: '14px' }
+      });
+
+      // Year header
+      yearEl.appendChild(
+        h('div', {style:{
+          display:'flex',alignItems:'center',
+          justifyContent:'space-between',
+          background:'var(--gradient)',
+          borderRadius:'12px',padding:'11px 16px',
+          cursor:'pointer',color:'#fff'
+        }, onClick: () => {
+          state.dockExpanded['y' + yr] =
+            !state.dockExpanded['y' + yr];
+          render();
+        }}, [
+          h('span', {style:{
+            fontSize:'15px',fontWeight:'800',
+            letterSpacing:'0.3px'
+          }}, '\u{1F4C5} ' + yr + '년'),
+          h('span', {style:{
+            fontSize:'11.5px',fontWeight:'600',
+            color:'#a9c8ee'
+          }}, total + '건')
+        ])
+      );
+
+      if (state.dockExpanded['y' + yr] !== true
+          && yr == new Date().getFullYear()) {
+        // Default open for current year
+      } else if (state.dockExpanded['y' + yr] === true
+          || !state.dockExpanded.hasOwnProperty('y'+yr)){
+        // Show months
+      } else {
+        body.appendChild(yearEl);
+        return;
+      }
+
+      months.forEach(mg => {
+        const monthCard = h('div', {style:{
+          background:'var(--card)',borderRadius:'14px',
+          border:'1px solid var(--cardbr)',
+          boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+          overflow:'hidden',marginTop:'10px'
+        }});
+        monthCard.appendChild(
+          h('div', {style:{
+            display:'flex',alignItems:'center',
+            justifyContent:'space-between',
+            padding:'8px 14px',
+            borderBottom:'2px solid var(--cardbr)'
+          }}, [
+            h('span', {style:{fontSize:'13px',
+              fontWeight:'800',color:'#0064B4'}},
+              mg.month + '월'),
+            h('span', {style:{fontSize:'10.5px',
+              fontWeight:'600',color:'var(--muted)'}},
+              mg.items.length + '건')
+          ])
+        );
+        mg.items.forEach(d => {
+          const s = new Date(d.start_date);
+          const phase = isDockCurrent(d)
+            ? 'current' : 'upcoming';
+          const dd = Math.max(0,
+            Math.ceil(
+              (s - new Date()) / 86400000
+            )
+          );
+          monthCard.appendChild(
+            h('div', {style:{
+              display:'flex',alignItems:'center',
+              gap:'12px',padding:'10px 14px',
+              borderBottom:'1px solid var(--divider)',
+              cursor:'pointer'
+            }}, [
+              h('div', {style:{
+                flex:'0 0 auto',width:'38px',
+                textAlign:'center'
+              }}, [
+                h('div', {style:{
+                  fontFamily:'Inter',fontWeight:'800',
+                  fontSize:'16px',
+                  color: phase === 'current'
+                    ? '#ee7c1a' : '#0064B4',
+                  lineHeight:'1'
+                }}, s.getDate() + '일'),
+              ]),
+              h('div', {style:{
+                width:'1px',alignSelf:'stretch',
+                background:'var(--cardbr)'
+              }}),
+              h('div', {style:{
+                flex:'1',minWidth:'0',display:'flex',
+                alignItems:'baseline',gap:'8px'
+              }}, [
+                h('span', {style:{
+                  fontFamily:'Inter',fontWeight:'800',
+                  fontSize:'15px',color:'var(--ink)'
+                }}, d.code),
+                h('span', {style:{
+                  fontSize:'11px',color:'var(--ink3)'
+                }}, '\u{1F4CD} ' + (d.port||''))
+              ]),
+              h('span', {style:{
+                flex:'0 0 auto',fontFamily:'Inter',
+                fontSize:'12px',fontWeight:'800',
+                color: phase === 'current'
+                  ? '#c25d00' : '#0064B4',
+                background: phase === 'current'
+                  ? '#fff3e0' : '#e8f1fb',
+                padding:'4px 10px',borderRadius:'18px'
+              }}, phase === 'current'
+                ? '진행중' : 'D-' + dd)
+            ])
+          );
+        });
+        yearEl.appendChild(monthCard);
+      });
+      body.appendChild(yearEl);
+    });
+}
+
+/* ==================================================
+   PORT TAB
+================================================== */
+const PORT_REGIONS = [
+  '전체','한국','중국','동남아','인도','중동','일본'
+];
+// Static port data (used as fallback / UI structure)
+const PORTS_DB = [
+  {name:'BUSAN',code:'KRPUS',region:'한국',flag:'\u{1F1F0}\u{1F1F7}',
+    terminals:['PNC','HJNC','HPNT','BNCT','HBGT','DGT','BPT']},
+  {name:'INCHEON',code:'KRINC',region:'한국',flag:'\u{1F1F0}\u{1F1F7}'},
+  {name:'GWANGYANG',code:'KRKAN',region:'한국',flag:'\u{1F1F0}\u{1F1F7}'},
+  {name:'ULSAN',code:'KRUSN',region:'한국',flag:'\u{1F1F0}\u{1F1F7}'},
+  {name:'GEOJE',code:'KRGJE',region:'한국',flag:'\u{1F1F0}\u{1F1F7}'},
+  {name:'SHANGHAI',code:'CNSHA',region:'중국',flag:'\u{1F1E8}\u{1F1F3}'},
+  {name:'NINGBO',code:'CNNGB',region:'중국',flag:'\u{1F1E8}\u{1F1F3}',
+    terminals:['NBO','ZOS']},
+  {name:'QINGDAO',code:'CNTAO',region:'중국',flag:'\u{1F1E8}\u{1F1F3}'},
+  {name:'TIANJIN',code:'CNTXG',region:'중국',flag:'\u{1F1E8}\u{1F1F3}'},
+  {name:'SHENZHEN',code:'CNSZX',region:'중국',flag:'\u{1F1E8}\u{1F1F3}',
+    terminals:['SHK','DCB']},
+  {name:'HAKATA',code:'JPHKT',region:'일본',flag:'\u{1F1EF}\u{1F1F5}'},
+  {name:'OSAKA',code:'JPOSA',region:'일본',flag:'\u{1F1EF}\u{1F1F5}'},
+  {name:'SINGAPORE',code:'SGSIN',region:'동남아',flag:'\u{1F30F}'},
+  {name:'PORT KLANG',code:'MYPKG',region:'동남아',flag:'\u{1F30F}',
+    terminals:['PKG','PKW']},
+  {name:'JAKARTA',code:'IDJKT',region:'동남아',flag:'\u{1F30F}'},
+  {name:'HOCHIMINH',code:'VNSGN',region:'동남아',flag:'\u{1F30F}'},
+  {name:'HAIPHONG',code:'VNHPH',region:'동남아',flag:'\u{1F30F}'},
+  {name:'MANILA',code:'PHMNL',region:'동남아',flag:'\u{1F30F}'},
+  {name:'CHENNAI',code:'INMAA',region:'인도',flag:'\u{1F1EE}\u{1F1F3}'},
+  {name:'NHAVA SHEVA',code:'INNSA',region:'인도',flag:'\u{1F1EE}\u{1F1F3}'},
+  {name:'MUNDRA',code:'INMUN',region:'인도',flag:'\u{1F1EE}\u{1F1F3}'},
+  {name:'COLOMBO',code:'LKCMB',region:'인도',flag:'\u{1F1EE}\u{1F1F3}'},
+  {name:'JEBEL ALI',code:'AEJEA',region:'중동',flag:'\u{1F30A}'},
+];
+const PORT_KR = {
+  BUSAN:'부산',INCHEON:'인천',GWANGYANG:'광양',
+  ULSAN:'울산',GEOJE:'거제',SHANGHAI:'상하이',
+  NINGBO:'닝보',QINGDAO:'칭다오',TIANJIN:'톈진',
+  SHENZHEN:'션전',HAKATA:'하카타',OSAKA:'오사카',
+  SINGAPORE:'싱가포르','PORT KLANG':'포트클랑',
+  JAKARTA:'자카르타',HOCHIMINH:'호치민',
+  HAIPHONG:'하이퐁',MANILA:'마닐라',
+  CHENNAI:'첸나이','NHAVA SHEVA':'나바셰바',
+  MUNDRA:'문드라',COLOMBO:'콜롬보',
+  'JEBEL ALI':'제벨알리'
+};
+
+function renderPortTab(container) {
+  const header = h('div', {className: 'tab-header'});
+  header.appendChild(
+    h('div', {style:{fontSize:'19px',fontWeight:'700',
+      marginBottom:'12px'}},
+      '\u{1F50D} 항구 검색')
+  );
+
+  // Search
+  const searchBox = h('div', {
+    className: 'search-box',
+    style: { height: '44px' }
+  });
+  searchBox.appendChild(
+    h('span', {style:{opacity:'0.8'}}, '\u{1F50D}')
+  );
+  const inp = h('input', {
+    id: 'port-search',
+    placeholder: '항구명 또는 코드 검색',
+    value: state.portQuery,
+    style: { fontSize: '14px' }
+  });
+  inp.addEventListener('input', e => {
+    state.portQuery = e.target.value;
+    state.selectedPort = null;
+    render();
+  });
+  searchBox.appendChild(inp);
+  if (state.portQuery) {
+    searchBox.appendChild(
+      h('span', {className:'clear-x', onClick: () => {
+        state.portQuery = ''; render();
+      }}, '\u2715')
+    );
+  }
+  header.appendChild(searchBox);
+
+  // Region chips
+  const chips = h('div', {style:{
+    marginTop:'10px',display:'flex',gap:'7px',
+    overflowX:'auto',paddingBottom:'2px'
+  }});
+  PORT_REGIONS.forEach(r => {
+    const active = state.portRegion === r;
+    chips.appendChild(
+      h('span', {
+        className: 'chip',
+        style: {
+          color: active ? '#fff' : '#cfe0f5',
+          background: active
+            ? 'rgba(255,255,255,.28)'
+            : 'rgba(255,255,255,.08)',
+          border: '1px solid '
+            + (active ? 'rgba(255,255,255,.5)'
+              : 'rgba(255,255,255,.15)')
+        },
+        onClick: () => {
+          state.portRegion = r;
+          state.selectedPort = null;
+          render();
+        }
+      }, r)
+    );
+  });
+  header.appendChild(chips);
+  container.appendChild(header);
+
+  // Body
+  const body = h('div', {style:{padding:'16px'}});
+
+  if (state.selectedPort) {
+    renderPortDetail(body);
+  } else {
+    renderPortList(body);
+  }
+  container.appendChild(body);
+}
+
+function renderPortList(body) {
+  const pq = (state.portQuery||'').trim().toUpperCase();
+  const rawq = (state.portQuery||'').trim();
+
+  // Recent ports
+  if (!pq && state.recentPorts.length) {
+    body.appendChild(
+      h('div', {className:'section-label'},
+        '\u{1F558} 최근 조회')
+    );
+    const row = h('div', {style:{
+      display:'flex',gap:'8px',overflowX:'auto',
+      marginBottom:'18px'
+    }});
+    state.recentPorts.forEach(name => {
+      const chip = h('div', {style:{
+        flex:'0 0 auto',display:'flex',
+        alignItems:'center',gap:'7px',
+        background:'var(--card)',
+        border:'1px solid var(--cardbr)',
+        borderRadius:'20px',padding:'8px 12px'
+      }}, [
+        h('span', {style:{
+          fontSize:'13px',fontWeight:'600',
+          color:'var(--ink)',cursor:'pointer'
+        }, onClick: () => {
+          state.selectedPort = name; render();
+        }}, name),
+        h('span', {style:{
+          fontSize:'13px',color:'#b3bccb',
+          cursor:'pointer'
+        }, onClick: (e) => {
+          e.stopPropagation();
+          state.recentPorts =
+            state.recentPorts.filter(x => x !== name);
+          try {
+            localStorage.setItem('kmtc_recent',
+              JSON.stringify(state.recentPorts));
+          } catch(e) {}
+          render();
+        }}, '\u2715')
+      ]);
+      row.appendChild(chip);
+    });
+    body.appendChild(row);
+  }
+
+  // Favorites
+  const favPorts = state.favorites.port;
+  if (!pq && favPorts.length) {
+    body.appendChild(
+      h('div', {className:'section-label'},
+        '\u2B50 즐겨찾는 항구')
+    );
+    const wrap = h('div', {style:{
+      display:'flex',flexWrap:'wrap',gap:'8px',
+      marginBottom:'20px'
+    }});
+    favPorts.forEach(name => {
+      wrap.appendChild(
+        h('div', {style:{
+          display:'flex',alignItems:'center',gap:'6px',
+          background:'var(--card)',
+          border:'1px solid #e2e8f0',
+          borderRadius:'22px',padding:'9px 12px',
+          boxShadow:'0 1px 4px rgba(20,40,80,.05)'
+        }}, [
+          h('span', {style:{
+            color:'#f6a623',cursor:'pointer'
+          }, onClick: () => togglePortFav(name)},
+            '\u2605'),
+          h('span', {style:{
+            fontSize:'13px',fontWeight:'700',
+            color:'var(--ink)',cursor:'pointer'
+          }, onClick: () => {
+            state.selectedPort = name;
+            addRecentPort(name);
+            render();
+          }}, name)
+        ])
+      );
+    });
+    body.appendChild(wrap);
+  }
+
+  // Port groups
+  let ports = PORTS_DB;
+  if (pq) {
+    ports = PORTS_DB.filter(p => {
+      if (p.name.includes(pq)) return true;
+      if (p.code.includes(pq)) return true;
+      const kr = PORT_KR[p.name];
+      if (kr && rawq && kr.includes(rawq)) return true;
+      if (p.terminals &&
+          p.terminals.some(t => t.includes(pq))) {
+        return true;
+      }
+      return false;
+    });
+  } else if (state.portRegion !== '전체') {
+    ports = PORTS_DB.filter(
+      p => p.region === state.portRegion
+    );
+  }
+
+  // Group by region
+  const groups = {};
+  ports.forEach(p => {
+    (groups[p.region] = groups[p.region] || []).push(p);
+  });
+
+  const label = pq
+    ? `검색 결과 ${ports.length}곳`
+    : (state.portRegion === '전체'
+      ? '전체 항구' : state.portRegion);
+  body.appendChild(
+    h('div', {className:'section-label'}, label)
+  );
+
+  const regionOrder = pq
+    ? Object.keys(groups)
+    : ['한국','중국','동남아','인도','중동','일본']
+      .filter(r => groups[r]);
+
+  regionOrder.forEach(region => {
+    const ps = groups[region] || [];
+    if (!ps.length) return;
+    const isOpen = pq
+      || state.portRegion !== '전체'
+      || state.openRegions[region];
+
+    const groupEl = h('div', {style:{
+      background:'var(--card)',borderRadius:'14px',
+      border:'1px solid var(--cardbr)',
+      overflow:'hidden',
+      boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+      marginBottom:'10px'
+    }});
+
+    // Group header
+    groupEl.appendChild(
+      h('div', {style:{
+        display:'flex',alignItems:'center',
+        justifyContent:'space-between',
+        padding:'13px 15px',cursor:'pointer'
+      }, onClick: () => {
+        state.openRegions[region] =
+          !state.openRegions[region];
+        render();
+      }}, [
+        h('div', {style:{display:'flex',
+          alignItems:'center',gap:'9px'}}, [
+          h('span', {style:{fontSize:'16px'}},
+            ps[0].flag),
+          h('span', {style:{fontSize:'14px',
+            fontWeight:'700',color:'var(--ink)'}},
+            region),
+          h('span', {style:{fontSize:'11px',
+            color:'var(--muted)'}}, ps.length + '곳')
+        ]),
+        h('span', {style:{color:'#9aa5b6',
+          fontSize:'13px'}},
+          isOpen ? '\u25B2' : '\u25BC')
+      ])
+    );
+
+    if (isOpen) {
+      const list = h('div', {style:{
+        borderTop:'1px solid var(--divider)'
+      }});
+      ps.forEach(p => {
+        const isFav = favPorts.includes(p.name);
+        list.appendChild(
+          h('div', {style:{
+            display:'flex',alignItems:'center',
+            justifyContent:'space-between',
+            padding:'12px 15px',
+            borderBottom:'1px solid var(--divider)'
+          }}, [
+            h('div', {style:{
+              display:'flex',alignItems:'center',
+              gap:'10px',cursor:'pointer',flex:'1'
+            }, onClick: () => {
+              state.selectedPort = p.name;
+              addRecentPort(p.name);
+              render();
+            }}, [
+              h('span', {style:{fontSize:'14px'}},
+                '\u2693'),
+              h('span', {style:{fontSize:'14px',
+                fontWeight:'600',color:'var(--ink)'}},
+                p.name)
+            ]),
+            h('span', {style:{
+              cursor:'pointer',fontSize:'16px',
+              color: isFav ? '#f6a623' : '#c3ccda'
+            }, onClick: () => togglePortFav(p.name)},
+              isFav ? '\u2605' : '\u2606')
+          ])
+        );
+      });
+      groupEl.appendChild(list);
+    }
+    body.appendChild(groupEl);
+  });
+}
+
+function renderPortDetail(body) {
+  const name = state.selectedPort;
+  const portInfo = PORTS_DB.find(
+    p => p.name === name
+  ) || { name, code: '', region: '' };
+  const isFav = state.favorites.port.includes(name);
+
+  // Back button
+  body.appendChild(
+    h('div', {style:{
+      display:'inline-flex',alignItems:'center',
+      gap:'5px',fontSize:'13px',color:'#0064B4',
+      fontWeight:'600',cursor:'pointer',
+      marginBottom:'12px'
+    }, onClick: () => {
+      state.selectedPort = null; render();
+    }}, '\u2039 항구 목록')
+  );
+
+  // Port header card
+  const hdr = h('div', {style:{
+    background:'var(--gradient)',borderRadius:'16px',
+    padding:'16px 18px',color:'#fff',
+    marginBottom:'14px'
+  }});
+  hdr.appendChild(
+    h('div', {style:{
+      display:'flex',alignItems:'center',gap:'8px'
+    }}, [
+      h('span', {style:{fontSize:'20px',
+        fontWeight:'800'}}, name),
+      h('span', {style:{fontFamily:'Inter',
+        fontSize:'12px',color:'#a9c8ee'}},
+        portInfo.region),
+      h('span', {style:{cursor:'pointer',
+        fontSize:'18px',
+        color: isFav ? '#f6a623' : 'rgba(255,255,255,.5)'
+      }, onClick: () => togglePortFav(name)},
+        isFav ? '\u2605' : '\u2606')
+    ])
+  );
+  if (portInfo.terminals && portInfo.terminals.length) {
+    const tRow = h('div', {style:{
+      marginTop:'12px',display:'flex',
+      flexWrap:'wrap',gap:'6px'
+    }});
+    portInfo.terminals.forEach(t => {
+      tRow.appendChild(
+        h('span', {style:{
+          fontSize:'10.5px',fontFamily:'Inter',
+          color:'#d9e6f7',
+          background:'rgba(255,255,255,.14)',
+          borderRadius:'6px',padding:'3px 7px'
+        }}, t)
+      );
+    });
+    hdr.appendChild(tRow);
+  }
+  body.appendChild(hdr);
+
+  // Find ships calling this port from schedules
+  body.appendChild(
+    h('div', {className:'section-label'},
+      '입출항 스케줄')
+  );
+
+  const portName = name.toUpperCase();
+  const calls = [];
+  Object.entries(state.schedules).forEach(
+    ([code, rows]) => {
+      rows.forEach(r => {
+        const pn = portShort(
+          r.port_name || ''
+        ).toUpperCase();
+        if (pn === portName || pn.includes(portName)) {
+          calls.push({ ...r, vessel_code: code });
+        }
+      });
+    }
+  );
+  // Sort by ETA, show upcoming
+  const now = new Date();
+  const upcoming = calls
+    .filter(c => parseDate(c.eta) >= now)
+    .sort((a, b) =>
+      new Date(a.eta) - new Date(b.eta)
+    )
+    .slice(0, 20);
+
+  if (!upcoming.length) {
+    body.appendChild(
+      h('div', {style:{
+        background:'var(--card)',borderRadius:'14px',
+        border:'1px solid var(--cardbr)',
+        padding:'22px',textAlign:'center',
+        fontSize:'13px',color:'var(--muted)'
+      }}, '예정된 입출항 스케줄이 없습니다.')
+    );
+  } else {
+    upcoming.forEach(c => {
+      const eta = parseDate(c.eta);
+      const etd = parseDate(c.etd);
+      const ship = state.ships.find(
+        s => s.code === c.vessel_code
+      );
+      const isMine = state.favorites.ship.includes(
+        c.vessel_code
+      );
+      body.appendChild(
+        h('div', {style:{
+          background:'var(--card)',borderRadius:'14px',
+          border:'1px solid var(--cardbr)',
+          boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+          padding:'10px 14px',display:'flex',
+          alignItems:'center',
+          justifyContent:'space-between',gap:'10px',
+          marginBottom:'10px'
+        }}, [
+          h('div', {style:{minWidth:'0'}}, [
+            h('div', {style:{display:'flex',
+              alignItems:'baseline',gap:'7px',
+              flexWrap:'wrap'}}, [
+              h('span', {style:{fontFamily:'Inter',
+                fontWeight:'800',fontSize:'15px',
+                color:'var(--ink)'}},
+                c.vessel_code),
+              isMine ? h('span', {style:{
+                fontSize:'10px',fontWeight:'700',
+                color:'#f6a623'}}, '\u2605') : null,
+              c.terminal ? h('span', {style:{
+                fontSize:'10px',fontFamily:'Inter',
+                fontWeight:'700',color:'#0064B4',
+                background:'#e8f1fb',
+                padding:'1px 6px',borderRadius:'6px'
+              }}, c.terminal) : null
+            ]),
+            h('div', {style:{marginTop:'2px',
+              fontSize:'11px',color:'var(--ink3)'}},
+              '항차 ' + (c.voyage_no || '-')
+              + (ship ? ' \xB7 '
+                + (ship.route_key || '') : ''))
+          ]),
+          h('div', {style:{flex:'0 0 auto',
+            textAlign:'right',fontFamily:'Inter'}}, [
+            h('div', {style:{fontSize:'11.5px',
+              color:'#2e7d32',fontWeight:'700'}},
+              'ETA ' + (eta ? fmtShort(eta) : '-')),
+            h('div', {style:{fontSize:'11.5px',
+              color:'#c25d00',fontWeight:'700',
+              marginTop:'1px'}},
+              'ETD ' + (etd ? fmtShort(etd) : '-'))
+          ])
+        ])
+      );
+    });
+  }
+}
+
+async function togglePortFav(name) {
+  const favs = state.favorites.port;
+  const idx = favs.indexOf(name);
+  if (idx >= 0) {
+    const ok = await showConfirm(
+      name + ' 항구를 즐겨찾기에서 해제하시겠습니까?'
+    );
+    if (!ok) return;
+    favs.splice(idx, 1);
+  } else {
+    favs.push(name);
+    showToast(name + ' 즐겨찾기 추가');
+  }
+  state.favorites.port = [...favs];
+  if (state.user) {
+    saveFavorites(
+      state.user.email, 'port', state.favorites.port
+    );
+  }
+  render();
+}
+
+function addRecentPort(name) {
+  state.recentPorts = [
+    name,
+    ...state.recentPorts.filter(x => x !== name)
+  ].slice(0, 5);
+  try {
+    localStorage.setItem(
+      'kmtc_recent',
+      JSON.stringify(state.recentPorts)
+    );
+  } catch(e) {}
+}
+
+/* ==================================================
+   SETTINGS TAB
+================================================== */
+function renderSettingsTab(container) {
+  const header = h('div', {className:'tab-header'});
+  header.appendChild(
+    h('div', {style:{fontSize:'19px',fontWeight:'700'}},
+      '\u2699\uFE0F 설정')
+  );
+  container.appendChild(header);
+
+  const body = h('div', {style:{padding:'16px'}});
+
+  // Profile card
+  const user = state.user || {};
+  const isAdmin = user.role === 'admin';
+  const initial = (user.name || 'U')[0].toUpperCase();
+
+  const profile = h('div', {className:'settings-card'});
+  profile.appendChild(
+    h('div', {style:{display:'flex',alignItems:'center',
+      gap:'12px'}}, [
+      h('span', {className:'avatar'}, initial),
+      h('div', {style:{flex:'1'}}, [
+        h('div', {style:{fontSize:'15px',
+          fontWeight:'700',color:'var(--ink)'}}, [
+          user.name || '사용자',
+          ' ',
+          h('span', {style:{
+            fontSize:'11px',fontWeight:'700',
+            color: isAdmin ? '#0064B4' : '#5b6a82',
+            background: isAdmin ? '#e8f1fb' : '#eef1f6',
+            padding:'2px 8px',borderRadius:'12px'
+          }}, isAdmin ? '관리자' : '사용자')
+        ]),
+        h('div', {style:{fontSize:'12px',
+          color:'var(--ink3)',marginTop:'2px'}},
+          user.email || '')
+      ])
+    ])
+  );
+
+  // Dark mode toggle
+  const darkRow = h('div', {style:{
+    display:'flex',alignItems:'center',
+    justifyContent:'space-between',marginTop:'14px',
+    padding:'10px 2px 2px',
+    borderTop:'1px solid var(--divider)'
+  }});
+  darkRow.appendChild(
+    h('span', {style:{fontSize:'13px',fontWeight:'600',
+      color:'var(--ink)'}}, '\u{1F319} 다크 모드')
+  );
+  const toggle = h('span', {
+    className: 'dark-toggle',
+    style: {
+      background: state.dark ? '#0064B4' : '#c3ccda'
+    },
+    onClick: () => {
+      state.dark = !state.dark;
+      document.documentElement.setAttribute(
+        'data-theme', state.dark ? 'dark' : ''
+      );
+      try {
+        localStorage.setItem(
+          'kmtc_dark', state.dark ? '1' : '0'
+        );
+      } catch(e) {}
+      render();
+    }
+  });
+  toggle.appendChild(
+    h('span', {className:'dark-knob',
+      style: {
+        transform:
+          'translateX(' + (state.dark?'22px':'0') + ')'
+      }
+    })
+  );
+  darkRow.appendChild(toggle);
+  profile.appendChild(darkRow);
+
+  // Logout
+  profile.appendChild(
+    h('button', {className:'logout-btn',
+      onClick: async () => {
+        const ok = await showConfirm(
+          '로그아웃 하시겠습니까?'
+        );
+        if (ok) handleLogout();
+      }
+    }, '\u23FB 로그아웃')
+  );
+  body.appendChild(profile);
+
+  // Settings sub-tabs
+  const subTabs = [
+    { id: 'myships', label: '내 선박/항구' },
+    { id: 'account', label: '계정' },
+  ];
+  if (isAdmin) {
+    subTabs.push(
+      { id: 'ships', label: '선박' },
+      { id: 'system', label: '시스템' }
+    );
+  }
+  const tabRow = h('div', {style:{
+    display:'flex',gap:'8px',marginBottom:'18px'
+  }});
+  subTabs.forEach(t => {
+    const active = state.settingsTab === t.id;
+    tabRow.appendChild(
+      h('span', {style:{
+        flex:'1',textAlign:'center',fontSize:'12px',
+        fontWeight:'700',padding:'9px 0',
+        borderRadius:'10px',cursor:'pointer',
+        color: active ? '#fff' : 'var(--primary)',
+        background: active
+          ? 'var(--primary)' : 'var(--card)',
+        border: '1px solid '
+          + (active ? 'var(--primary)' : 'var(--cardbr)')
+      }, onClick: () => {
+        state.settingsTab = t.id;
+        state.favSearch = '';
+        render();
+      }}, t.label)
+    );
+  });
+  body.appendChild(tabRow);
+
+  // Sub-tab content
+  switch (state.settingsTab) {
+    case 'myships':
+      renderMyShipsSettings(body); break;
+    case 'account':
+      renderAccountSettings(body); break;
+    case 'ships':
+      if (isAdmin) renderShipManagement(body); break;
+    case 'system':
+      if (isAdmin) renderSystemSettings(body); break;
+  }
+
+  container.appendChild(body);
+}
+
+function renderMyShipsSettings(body) {
+  // Ship/Port sub toggle
+  const subRow = h('div', {style:{
+    display:'flex',gap:'8px',marginBottom:'12px'
+  }});
+  ['ship', 'port'].forEach(type => {
+    const active = state.settingsSub === type;
+    const count = type === 'ship'
+      ? state.favorites.ship.length
+      : state.favorites.port.length;
+    subRow.appendChild(
+      h('span', {style:{
+        flex:'1',textAlign:'center',fontSize:'12.5px',
+        fontWeight:'700',padding:'8px 0',
+        borderRadius:'9px',cursor:'pointer',
+        color: active ? '#fff' : 'var(--primary)',
+        background: active
+          ? 'var(--primary)' : 'var(--card)',
+        border: '1px solid '
+          + (active ? 'var(--primary)' : 'var(--cardbr)')
+      }, onClick: () => {
+        state.settingsSub = type;
+        state.favSearch = '';
+        render();
+      }}, (type === 'ship' ? '\u{1F6A2} 선박 ('
+        : '\u2693 항구 (') + count + ')')
+    );
+  });
+  body.appendChild(subRow);
+
+  // Search
+  const searchBox = h('div', {
+    className: 'search-box-light search-box',
+    style: { height: '40px', marginBottom: '12px',
+      background: 'var(--card)',
+      border: '1px solid var(--cardbr)' }
+  });
+  searchBox.appendChild(
+    h('span', {style:{opacity:'0.6'}}, '\u{1F50D}')
+  );
+  const inp = h('input', {
+    placeholder: state.settingsSub === 'ship'
+      ? '선명 또는 코드 검색' : '항구명 검색',
+    value: state.favSearch,
+    style: { color: 'var(--ink)' }
+  });
+  inp.addEventListener('input', e => {
+    state.favSearch = e.target.value; render();
+  });
+  searchBox.appendChild(inp);
+  if (state.favSearch) {
+    searchBox.appendChild(
+      h('span', {style:{cursor:'pointer',
+        color:'#b3bccb',fontSize:'14px'},
+        onClick: () => {
+          state.favSearch = ''; render();
+        }
+      }, '\u2715')
+    );
+  }
+  body.appendChild(searchBox);
+
+  if (state.settingsSub === 'ship') {
+    // Fleet toggle
+    const fleetRow = h('div', {style:{
+      display:'flex',gap:'8px',marginBottom:'12px'
+    }});
+    ['KMTC', 'SUNNY'].forEach(f => {
+      const active = state.settingsFleet === f;
+      fleetRow.appendChild(
+        h('span', {style:{
+          flex:'1',textAlign:'center',fontSize:'12px',
+          fontWeight:'700',padding:'7px 0',
+          borderRadius:'8px',cursor:'pointer',
+          color: active ? '#fff' : 'var(--primary)',
+          background: active
+            ? 'var(--primary)' : 'var(--card)',
+          border: '1px solid '
+            + (active
+              ? 'var(--primary)' : 'var(--cardbr)')
+        }, onClick: () => {
+          state.settingsFleet = f; render();
+        }}, f)
+      );
+    });
+    body.appendChild(fleetRow);
+
+    // Ship list
+    const fq = (state.favSearch||'').trim().toUpperCase();
+    let ships = state.ships.filter(s => {
+      const isSunny = (s.code||'').startsWith('S');
+      if (state.settingsFleet === 'SUNNY'
+          && !isSunny) return false;
+      if (state.settingsFleet === 'KMTC'
+          && isSunny) return false;
+      if (fq) {
+        const code = (s.code||'').toUpperCase();
+        const name = (s.name||'').toUpperCase();
+        if (!code.includes(fq) && !name.includes(fq)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const list = h('div', {style:{
+      background:'var(--card)',borderRadius:'14px',
+      border:'1px solid var(--cardbr)',
+      overflow:'hidden',
+      boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+      marginBottom:'22px'
+    }});
+
+    ships.forEach(s => {
+      const isFav = state.favorites.ship.includes(
+        s.code
+      );
+      list.appendChild(
+        h('div', {style:{
+          display:'flex',alignItems:'center',
+          justifyContent:'space-between',
+          padding:'10px 14px',
+          borderBottom:'1px solid var(--divider)'
+        }}, [
+          h('div', {style:{display:'flex',
+            alignItems:'baseline',gap:'7px',
+            minWidth:'0'}}, [
+            h('span', {style:{fontFamily:'Inter',
+              fontWeight:'800',fontSize:'15px',
+              color:'var(--ink)'}}, s.code),
+            h('span', {style:{fontSize:'11px',
+              color:'#8794a8'}}, s.name || '')
+          ]),
+          h('span', {style:{
+            flex:'0 0 auto',cursor:'pointer',
+            fontSize:'18px',padding:'0 4px',
+            color: isFav ? '#f6a623' : '#c3ccda'
+          }, onClick: () => toggleShipFav(s.code)},
+            isFav ? '\u2605' : '\u2606')
+        ])
+      );
+    });
+    body.appendChild(list);
+
+  } else {
+    // Port favorites
+    const fq = (state.favSearch||'').trim().toUpperCase();
+    const regions = ['한국','중국','동남아','인도',
+      '중동','일본'];
+    regions.forEach(region => {
+      const ps = PORTS_DB.filter(p => {
+        if (p.region !== region) return false;
+        if (fq && !p.name.includes(fq)
+            && !(PORT_KR[p.name]||'').includes(
+              state.favSearch)) {
+          return false;
+        }
+        return true;
+      });
+      if (!ps.length) return;
+
+      const isOpen = state.openRegions['s_'+region];
+      const groupEl = h('div', {style:{
+        background:'var(--card)',borderRadius:'14px',
+        border:'1px solid var(--cardbr)',
+        overflow:'hidden',
+        boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+        marginBottom:'10px'
+      }});
+      groupEl.appendChild(
+        h('div', {style:{
+          display:'flex',alignItems:'center',
+          justifyContent:'space-between',
+          padding:'12px 14px',cursor:'pointer'
+        }, onClick: () => {
+          state.openRegions['s_'+region] =
+            !state.openRegions['s_'+region];
+          render();
+        }}, [
+          h('div', {style:{display:'flex',
+            alignItems:'center',gap:'8px'}}, [
+            h('span', {style:{fontSize:'14px',
+              fontWeight:'700',color:'var(--ink)'}},
+              region),
+            h('span', {style:{fontSize:'11px',
+              color:'var(--muted)'}}, ps.length + '곳')
+          ]),
+          h('span', {style:{color:'#9aa5b6',
+            fontSize:'12px'}},
+            isOpen ? '\u25B2' : '\u25BE')
+        ])
+      );
+      if (isOpen) {
+        const listEl = h('div', {style:{
+          borderTop:'1px solid var(--divider)'
+        }});
+        ps.forEach(p => {
+          const isFav = state.favorites.port.includes(
+            p.name
+          );
+          listEl.appendChild(
+            h('div', {style:{
+              display:'flex',alignItems:'center',
+              justifyContent:'space-between',
+              padding:'10px 14px',
+              borderBottom:
+                '1px solid var(--divider)'
+            }}, [
+              h('div', {style:{display:'flex',
+                alignItems:'center',gap:'8px',
+                minWidth:'0'}}, [
+                h('span', {style:{fontSize:'13px'}},
+                  '\u2693'),
+                h('span', {style:{fontSize:'14px',
+                  fontWeight:'600',color:'var(--ink)'}},
+                  p.name)
+              ]),
+              h('span', {style:{
+                flex:'0 0 auto',cursor:'pointer',
+                fontSize:'18px',padding:'0 4px',
+                color: isFav ? '#f6a623' : '#c3ccda'
+              }, onClick: () => togglePortFav(p.name)},
+                isFav ? '\u2605' : '\u2606')
+            ])
+          );
+        });
+        groupEl.appendChild(listEl);
+      }
+      body.appendChild(groupEl);
+    });
+  }
+}
+
+function renderAccountSettings(body) {
+  const user = state.user || {};
+
+  // My account info
+  body.appendChild(
+    h('div', {className:'section-label'},
+      '\u{1F464} 내 계정 정보')
+  );
+  const card = h('div', {style:{
+    background:'var(--card)',borderRadius:'14px',
+    border:'1px solid var(--cardbr)',
+    boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+    padding:'14px 16px',marginBottom:'22px'
+  }});
+  // Email
+  card.appendChild(
+    h('div', {style:{display:'flex',
+      alignItems:'center',justifyContent:'space-between',
+      padding:'4px 0'}}, [
+      h('span', {style:{fontSize:'12.5px',
+        color:'var(--ink3)'}}, '이메일'),
+      h('span', {style:{fontSize:'13px',fontWeight:'600',
+        color:'var(--ink)',fontFamily:'Inter'}},
+        user.email || '-')
+    ])
+  );
+  // Role
+  const isAdmin = user.role === 'admin';
+  card.appendChild(
+    h('div', {style:{display:'flex',
+      alignItems:'center',justifyContent:'space-between',
+      padding:'4px 0',
+      borderTop:'1px solid var(--divider)'}}, [
+      h('span', {style:{fontSize:'12.5px',
+        color:'var(--ink3)'}}, '권한'),
+      h('span', {style:{
+        fontSize:'11px',fontWeight:'700',
+        color: isAdmin ? '#0064B4' : '#5b6a82',
+        background: isAdmin ? '#e8f1fb' : '#eef1f6',
+        padding:'2px 9px',borderRadius:'12px'
+      }}, isAdmin ? '관리자' : '사용자')
+    ])
+  );
+  // Password change
+  const pwToggle = h('div', {style:{
+    display:'flex',alignItems:'center',
+    justifyContent:'space-between',
+    padding:'8px 0 4px',
+    borderTop:'1px solid var(--divider)',
+    marginTop:'4px'
+  }});
+  pwToggle.appendChild(
+    h('span', {style:{fontSize:'12.5px',
+      color:'var(--ink3)'}}, '\u{1F512} 비밀번호')
+  );
+  pwToggle.appendChild(
+    h('span', {style:{fontSize:'12px',fontWeight:'700',
+      color:'#0064B4',cursor:'pointer'},
+      onClick: () => {
+        state.showPwForm = !state.showPwForm;
+        state.pwNew = ''; state.pwConfirm = '';
+        render();
+      }
+    }, state.showPwForm ? '취소' : '변경하기')
+  );
+  card.appendChild(pwToggle);
+
+  if (state.showPwForm) {
+    const pwForm = h('div', {style:{
+      marginTop:'8px',paddingTop:'12px',
+      borderTop:'1px dashed var(--cardbr)'
+    }});
+    const inp1 = h('input', {type:'password',
+      placeholder:'새 비밀번호 (6자 이상)',
+      value: state.pwNew,
+      style:{
+        width:'100%',height:'42px',
+        border:'1px solid var(--cardbr)',
+        borderRadius:'10px',padding:'0 12px',
+        fontSize:'13px',outline:'none',
+        background:'var(--card)',color:'var(--ink)',
+        marginBottom:'8px'
+      }
+    });
+    inp1.addEventListener('input', e => {
+      state.pwNew = e.target.value;
+    });
+    const inp2 = h('input', {type:'password',
+      placeholder:'새 비밀번호 확인',
+      value: state.pwConfirm,
+      style:{
+        width:'100%',height:'42px',
+        border:'1px solid var(--cardbr)',
+        borderRadius:'10px',padding:'0 12px',
+        fontSize:'13px',outline:'none',
+        background:'var(--card)',color:'var(--ink)'
+      }
+    });
+    inp2.addEventListener('input', e => {
+      state.pwConfirm = e.target.value;
+    });
+    pwForm.appendChild(inp1);
+    pwForm.appendChild(inp2);
+    pwForm.appendChild(
+      h('button', {style:{
+        width:'100%',height:'42px',marginTop:'12px',
+        border:'none',borderRadius:'11px',
+        background:'#0064B4',color:'#fff',
+        fontWeight:'700',fontSize:'14px',
+        cursor:'pointer'
+      }, onClick: handleChangePw},
+        '변경 저장')
+    );
+    card.appendChild(pwForm);
+  }
+  body.appendChild(card);
+
+  // Admin: user management
+  if (user.role === 'admin') {
+    renderAdminUsers(body);
+  }
+}
+
+async function handleChangePw() {
+  if (!state.pwNew || state.pwNew.length < 6) {
+    showToast('비밀번호는 6자 이상이어야 합니다.');
+    return;
+  }
+  if (state.pwNew !== state.pwConfirm) {
+    showToast('두 비밀번호가 일치하지 않습니다.');
+    return;
+  }
+  const hash = await hashPassword(state.pwNew);
+  const { error } = await sb.from('users').update({
+    password_hash: hash
+  }).eq('email', state.user.email);
+  if (error) {
+    showToast('변경 실패: ' + error.message);
+    return;
+  }
+  state.showPwForm = false;
+  state.pwNew = '';
+  state.pwConfirm = '';
+  showToast('\u2713 비밀번호가 변경되었습니다.');
+  render();
+}
+
+async function renderAdminUsers(body) {
+  // Sub-tabs
+  const subRow = h('div', {style:{
+    display:'flex',gap:'8px',marginBottom:'14px'
+  }});
+  ['pending', 'registered'].forEach(type => {
+    const active = state.accountSub === type;
+    const count = type === 'pending'
+      ? state.pendingUsers.length
+      : state.registeredUsers.length;
+    subRow.appendChild(
+      h('span', {style:{
+        flex:'1',textAlign:'center',fontSize:'12.5px',
+        fontWeight:'700',padding:'8px 0',
+        borderRadius:'9px',cursor:'pointer',
+        color: active ? '#fff' : 'var(--primary)',
+        background: active
+          ? 'var(--primary)' : 'var(--card)',
+        border: '1px solid '
+          + (active ? 'var(--primary)' : 'var(--cardbr)')
+      }, onClick: () => {
+        state.accountSub = type; render();
+      }},
+        (type === 'pending' ? '승인 대기 (' : '등록 사용자 (')
+        + count + ')')
+    );
+  });
+  body.appendChild(subRow);
+
+  if (state.accountSub === 'pending') {
+    if (!state.pendingUsers.length) {
+      body.appendChild(
+        h('div', {style:{
+          background:'var(--card)',borderRadius:'14px',
+          border:'1px solid var(--cardbr)',
+          padding:'16px',textAlign:'center',
+          fontSize:'13px',color:'var(--muted)'
+        }}, '대기 중인 신청이 없습니다.')
+      );
+    }
+    state.pendingUsers.forEach(u => {
+      const card = h('div', {style:{
+        background:'var(--card)',borderRadius:'14px',
+        border:'1px solid #ffe6c2',
+        boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+        padding:'13px 15px',marginBottom:'10px'
+      }});
+      card.appendChild(
+        h('div', {style:{fontSize:'14px',
+          fontWeight:'700',color:'var(--ink)'}}, [
+          u.name,
+          ' ',
+          h('span', {style:{fontSize:'11px',
+            fontWeight:'500',color:'var(--muted)'}},
+            u.dept || '')
+        ])
+      );
+      card.appendChild(
+        h('div', {style:{fontSize:'12px',
+          color:'var(--ink3)',marginTop:'2px'}},
+          u.email)
+      );
+      if (u.purpose) {
+        card.appendChild(
+          h('div', {style:{
+            fontSize:'12px',color:'var(--ink3)',
+            marginTop:'6px',background:'var(--page)',
+            borderRadius:'8px',padding:'8px 10px'
+          }}, '\u{1F4AC} ' + u.purpose)
+        );
+      }
+      const btns = h('div', {style:{
+        display:'flex',gap:'8px',marginTop:'10px'
+      }});
+      btns.appendChild(
+        h('button', {style:{
+          flex:'1',height:'36px',border:'none',
+          borderRadius:'9px',background:'#0064B4',
+          color:'#fff',fontWeight:'700',fontSize:'13px',
+          cursor:'pointer'
+        }, onClick: async () => {
+          const ok = await showConfirm(
+            u.name + ' 님의 계정을 승인하시겠습니까?'
+          );
+          if (!ok) return;
+          await sb.from('users').update({
+            status: 'active'
+          }).eq('email', u.email);
+          state.pendingUsers =
+            state.pendingUsers.filter(
+              x => x.email !== u.email
+            );
+          state.registeredUsers =
+            await loadRegisteredUsers();
+          showToast(u.name + ' 승인 완료');
+          render();
+        }}, '승인')
+      );
+      btns.appendChild(
+        h('button', {style:{
+          flex:'1',height:'36px',
+          border:'1px solid #e0e6ee',borderRadius:'9px',
+          background:'var(--card)',color:'var(--ink3)',
+          fontWeight:'600',fontSize:'13px',
+          cursor:'pointer'
+        }, onClick: async () => {
+          const ok = await showConfirm(
+            u.name + ' 님의 신청을 거절하시겠습니까?'
+          );
+          if (!ok) return;
+          await sb.from('users').update({
+            status: 'rejected'
+          }).eq('email', u.email);
+          state.pendingUsers =
+            state.pendingUsers.filter(
+              x => x.email !== u.email
+            );
+          showToast(u.name + ' 거절됨');
+          render();
+        }}, '거절')
+      );
+      card.appendChild(btns);
+      body.appendChild(card);
+    });
+  } else {
+    // Registered users list
+    const list = h('div', {style:{
+      background:'var(--card)',borderRadius:'14px',
+      border:'1px solid var(--cardbr)',
+      overflow:'hidden',
+      boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+      marginBottom:'22px'
+    }});
+    const AV = ['#0064B4','#00897b','#6a3ab5',
+      '#c25d00','#3949ab'];
+    state.registeredUsers.forEach((u, i) => {
+      const isAdmin = u.role === 'admin';
+      const isSelf = u.email === state.user.email;
+      list.appendChild(
+        h('div', {style:{
+          display:'flex',alignItems:'center',
+          justifyContent:'space-between',
+          padding:'11px 14px',
+          borderBottom:'1px solid var(--divider)'
+        }}, [
+          h('div', {style:{display:'flex',
+            alignItems:'center',gap:'11px'}}, [
+            h('span', {style:{
+              width:'32px',height:'32px',
+              borderRadius:'50%',
+              background: AV[i % AV.length],
+              color:'#fff',display:'flex',
+              alignItems:'center',
+              justifyContent:'center',
+              fontWeight:'700',fontSize:'13px',
+              fontFamily:'Inter'
+            }}, (u.name||'U')[0].toUpperCase()),
+            h('div', {}, [
+              h('div', {style:{fontSize:'13px',
+                fontWeight:'600',color:'var(--ink)'}}, [
+                u.name || u.email,
+                ' ',
+                h('span', {style:{
+                  fontSize:'10px',fontWeight:'700',
+                  color: isAdmin ? '#0064B4' : '#5b6a82',
+                  background: isAdmin
+                    ? '#e8f1fb' : '#eef1f6',
+                  padding:'2px 7px',borderRadius:'10px'
+                }}, isAdmin ? '관리자' : '사용자')
+              ]),
+              h('div', {style:{fontSize:'11px',
+                color:'var(--muted)'}}, u.email)
+            ])
+          ]),
+          !isSelf ? h('div', {style:{
+            display:'flex',gap:'6px',flex:'0 0 auto'
+          }}, [
+            h('span', {style:{
+              fontSize:'10.5px',fontWeight:'600',
+              color:'#0064B4',background:'#e8f1fb',
+              padding:'5px 8px',borderRadius:'8px',
+              cursor:'pointer'
+            }, onClick: async () => {
+              const newRole = isAdmin ? 'user' : 'admin';
+              const msg = isAdmin
+                ? u.name + ' 님을 일반 사용자로 강등?'
+                : u.name + ' 님을 관리자로 승격?';
+              const ok = await showConfirm(msg);
+              if (!ok) return;
+              await sb.from('users').update({
+                role: newRole
+              }).eq('email', u.email);
+              state.registeredUsers =
+                await loadRegisteredUsers();
+              render();
+            }}, isAdmin ? '일반으로' : '관리자로'),
+            h('span', {style:{
+              fontSize:'10.5px',fontWeight:'600',
+              color:'#d14343',background:'#fdeaea',
+              padding:'5px 8px',borderRadius:'8px',
+              cursor:'pointer'
+            }, onClick: async () => {
+              const ok = await showConfirm(
+                u.name + ' 님의 접근 권한을 해제?'
+              );
+              if (!ok) return;
+              await sb.from('users').update({
+                status: 'rejected'
+              }).eq('email', u.email);
+              state.registeredUsers =
+                await loadRegisteredUsers();
+              render();
+            }}, '해제')
+          ]) : h('span', {style:{fontSize:'10px',
+            color:'var(--muted)'}}, '본인 \u{1F512}')
+        ])
+      );
+    });
+    body.appendChild(list);
+  }
+}
+
+function renderShipManagement(body) {
+  body.appendChild(
+    h('div', {style:{
+      display:'flex',alignItems:'center',
+      justifyContent:'space-between',
+      padding:'0 2px 10px'
+    }}, [
+      h('span', {className:'section-label',
+        style:{padding:'0'}},
+        '\u{1F6A2} 선박 관리 ('
+        + state.ships.length + ')'),
+      h('span', {style:{fontSize:'12px',
+        fontWeight:'700',color:'#0064B4',
+        cursor:'pointer'},
+        onClick: () => {
+          state.showShipForm = !state.showShipForm;
+          state.editShipCode = null;
+          render();
+        }
+      }, state.showShipForm ? '닫기' : '+ 추가')
+    ])
+  );
+
+  if (state.showShipForm) {
+    renderShipForm(body);
+  }
+
+  // Search + fleet filter
+  const searchBox = h('div', {
+    className: 'search-box-light search-box',
+    style: { height: '40px', marginBottom: '12px',
+      background: 'var(--card)',
+      border: '1px solid var(--cardbr)' }
+  });
+  searchBox.appendChild(
+    h('span', {style:{opacity:'0.6'}}, '\u{1F50D}')
+  );
+  const inp = h('input', {
+    placeholder: '선명 또는 코드 검색',
+    value: state.favSearch,
+    style: { color: 'var(--ink)' }
+  });
+  inp.addEventListener('input', e => {
+    state.favSearch = e.target.value; render();
+  });
+  searchBox.appendChild(inp);
+  body.appendChild(searchBox);
+
+  // Ship list
+  const fq = (state.favSearch||'').trim().toUpperCase();
+  const ships = state.ships.filter(s => {
+    if (!fq) return true;
+    return (s.code||'').toUpperCase().includes(fq)
+      || (s.name||'').toUpperCase().includes(fq);
+  });
+
+  const list = h('div', {style:{
+    background:'var(--card)',borderRadius:'14px',
+    border:'1px solid var(--cardbr)',
+    overflow:'hidden',
+    boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+    marginBottom:'22px'
+  }});
+
+  ships.forEach(s => {
+    list.appendChild(
+      h('div', {style:{
+        display:'flex',alignItems:'center',
+        justifyContent:'space-between',
+        padding:'11px 14px',
+        borderBottom:'1px solid var(--divider)'
+      }}, [
+        h('div', {style:{minWidth:'0'}}, [
+          h('div', {style:{display:'flex',
+            alignItems:'baseline',gap:'7px'}}, [
+            h('span', {style:{fontFamily:'Inter',
+              fontWeight:'800',fontSize:'15px',
+              color:'var(--ink)'}}, s.code),
+            h('span', {style:{fontSize:'11.5px',
+              color:'#8794a8'}}, s.name || '')
+          ]),
+          h('div', {style:{fontSize:'10.5px',
+            color:'var(--muted)',marginTop:'2px',
+            fontFamily:'Inter'}},
+            'IMO ' + (s.imo||'-') + ' \xB7 '
+            + (s.size_type||'-') + ' \xB7 '
+            + numFmt(s.dwt) + ' DWT'),
+          s.route_key ? h('div', {style:{
+            fontSize:'10.5px',color:'#0064B4',
+            marginTop:'2px'}}, s.route_key) : null
+        ]),
+        h('div', {style:{display:'flex',gap:'6px',
+          flex:'0 0 auto',alignItems:'center'}}, [
+          h('span', {style:{
+            fontSize:'11px',fontWeight:'600',
+            color:'#0064B4',background:'#e8f1fb',
+            padding:'5px 9px',borderRadius:'8px',
+            cursor:'pointer'
+          }, onClick: () => {
+            state.showShipForm = true;
+            state.editShipCode = s.code;
+            render();
+          }}, '수정'),
+          h('span', {style:{
+            fontSize:'11px',fontWeight:'600',
+            color:'#d14343',background:'#fdeaea',
+            padding:'5px 9px',borderRadius:'8px',
+            cursor:'pointer'
+          }, onClick: async () => {
+            const ok = await showConfirm(
+              s.code + ' 선박을 삭제하시겠습니까?'
+            );
+            if (!ok) return;
+            await sb.from('ships').delete()
+              .eq('code', s.code);
+            state.ships = state.ships.filter(
+              x => x.code !== s.code
+            );
+            showToast(s.code + ' 삭제됨');
+            render();
+          }}, '삭제')
+        ])
+      ])
+    );
+  });
+  body.appendChild(list);
+}
+
+function renderShipForm(body) {
+  const editing = state.editShipCode;
+  const ship = editing
+    ? state.ships.find(s => s.code === editing) : {};
+
+  const card = h('div', {style:{
+    background:'var(--card)',borderRadius:'14px',
+    border:'1px solid #cfe0f2',
+    boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+    padding:'14px',marginBottom:'14px'
+  }});
+
+  card.appendChild(
+    h('div', {style:{fontSize:'13px',fontWeight:'700',
+      color:'var(--ink)',marginBottom:'12px'}},
+      editing ? '선박 수정' : '선박 추가')
+  );
+
+  const grid = h('div', {style:{
+    display:'grid',gridTemplateColumns:'1fr 1fr',
+    gap:'8px'
+  }});
+  const fields = [
+    ['sf_code', '코드 (KPS)', ship.code || ''],
+    ['sf_name', '선박명', ship.name || ''],
+    ['sf_imo', 'IMO No.', ship.imo || ''],
+    ['sf_size', 'SIZE TYPE', ship.size_type || ''],
+    ['sf_dwt', 'DWT', ship.dwt || ''],
+    ['sf_gt', 'GT', ship.gt || ''],
+    ['sf_built', '건조년', ship.built || ''],
+    ['sf_flag', '기국', ship.flag || '']
+  ];
+  fields.forEach(([id, ph, val]) => {
+    const inp = h('input', {
+      id, placeholder: ph, value: val,
+      style: {
+        height:'40px',width:'100%',minWidth:'0',
+        border:'1px solid #e0e6ee',borderRadius:'9px',
+        padding:'0 12px',fontSize:'13px',outline:'none',
+        background:'var(--card)',color:'var(--ink)'
+      }
+    });
+    grid.appendChild(inp);
+  });
+  card.appendChild(grid);
+
+  card.appendChild(
+    h('div', {style:{marginTop:'8px',fontSize:'11px',
+      color:'var(--muted)',padding:'2px'}},
+      '\u203B 항로/기항지 정보는 API에서 자동 연동')
+  );
+
+  const btns = h('div', {style:{
+    display:'flex',gap:'8px',marginTop:'12px'
+  }});
+  btns.appendChild(
+    h('button', {style:{
+      flex:'1',height:'40px',border:'none',
+      borderRadius:'10px',background:'#0064B4',
+      color:'#fff',fontWeight:'700',fontSize:'13px',
+      cursor:'pointer'
+    }, onClick: async () => {
+      const code = ($('#sf_code')||{}).value || '';
+      const name = ($('#sf_name')||{}).value || '';
+      if (!code || !name) {
+        showToast('코드와 선박명은 필수입니다.');
+        return;
+      }
+      const rec = {
+        code: code.toUpperCase(),
+        name,
+        imo: ($('#sf_imo')||{}).value || '',
+        size_type: ($('#sf_size')||{}).value || '',
+        dwt: parseInt(($('#sf_dwt')||{}).value)||0,
+        gt: parseInt(($('#sf_gt')||{}).value)||0,
+        built: parseInt(($('#sf_built')||{}).value)||0,
+        flag: ($('#sf_flag')||{}).value || ''
+      };
+      if (editing) {
+        await sb.from('ships').update(rec)
+          .eq('code', editing);
+        showToast(rec.code + ' 수정 완료');
+      } else {
+        await sb.from('ships').upsert(rec);
+        showToast(rec.code + ' 추가 완료');
+      }
+      state.ships = await loadShips();
+      state.showShipForm = false;
+      state.editShipCode = null;
+      render();
+    }}, editing ? '수정 저장' : '추가')
+  );
+  btns.appendChild(
+    h('button', {style:{
+      flex:'0 0 auto',padding:'0 16px',height:'40px',
+      border:'1px solid #e0e6ee',borderRadius:'10px',
+      background:'var(--card)',color:'var(--ink3)',
+      fontWeight:'600',fontSize:'13px',cursor:'pointer'
+    }, onClick: () => {
+      state.showShipForm = false;
+      state.editShipCode = null;
+      render();
+    }}, '취소')
+  );
+  card.appendChild(btns);
+  body.appendChild(card);
+}
+
+function renderSystemSettings(body) {
+  body.appendChild(
+    h('div', {className:'section-label'},
+      '\u{1F4CA} 시스템 상태')
+  );
+
+  const card = h('div', {style:{
+    background:'var(--card)',borderRadius:'14px',
+    border:'1px solid var(--cardbr)',
+    boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+    padding:'16px'
+  }});
+
+  // Refresh button
+  card.appendChild(
+    h('button', {style:{
+      width:'100%',height:'46px',border:'none',
+      borderRadius:'12px',
+      background:'var(--gradient)',color:'#fff',
+      fontWeight:'700',fontSize:'14px',
+      cursor:'pointer',display:'flex',
+      alignItems:'center',justifyContent:'center',
+      gap:'8px'
+    }, onClick: async () => {
+      showToast('데이터 새로고침 중...');
+      state.loading = true;
+      render();
+      state.ships = await loadShips();
+      const favCodes = state.favorites.ship;
+      if (favCodes.length) {
+        const map = await loadScheduleFor(favCodes);
+        Object.assign(state.schedules, map);
+      }
+      state.docks = await loadDocks();
+      state.loading = false;
+      state.lastUpdate = fmtFull(new Date());
+      showToast('\u2713 최신 데이터로 업데이트 완료');
+      render();
+    }}, [
+      h('span', {style:{fontSize:'16px'}}, '\u{1F504}'),
+      '데이터 수동 새로고침'
+    ])
+  );
+
+  // Stats
+  const stats = h('div', {style:{
+    marginTop:'16px',borderTop:'1px solid var(--divider)',
+    paddingTop:'14px',display:'flex',
+    flexDirection:'column',gap:'10px'
+  }});
+  const totalVoyages = Object.values(state.schedules)
+    .reduce((s, rows) => {
+      const voys = new Set(
+        rows.map(r => r.voyage_no)
+      );
+      return s + voys.size;
+    }, 0);
+
+  const statRows = [
+    ['마지막 업데이트', state.lastUpdate || '-'],
+    ['등록 선박 / 총 항차',
+      state.ships.length + '척 / '
+      + totalVoyages + '항차'],
+    ['도크 일정', state.docks.length + '건'],
+    ['사용자', state.registeredUsers.length + '명'],
+  ];
+  statRows.forEach(([label, val]) => {
+    stats.appendChild(
+      h('div', {style:{display:'flex',
+        alignItems:'center',
+        justifyContent:'space-between'}}, [
+        h('span', {style:{fontSize:'12px',
+          color:'var(--ink3)'}}, label),
+        h('span', {style:{fontFamily:'Inter',
+          fontSize:'12px',color:'var(--ink)',
+          fontWeight:'600'}}, val)
+      ])
+    );
+  });
+  card.appendChild(stats);
+  body.appendChild(card);
+}
+
+/* ==================================================
+   INITIALIZATION
+================================================== */
+async function initAppData() {
+  state.loading = true;
+  render();
+
+  try {
+    // Load ships first (fast)
+    state.ships = await loadShips();
+    console.log('initAppData: ships loaded:', state.ships.length);
+    render();
+
+    // Load favorites, docks, config in parallel
+    const email = state.user ? state.user.email : null;
+    const [favs, docks, config] = await Promise.all([
+      loadFavorites(email),
+      loadDocks(),
+      loadConfig()
+    ]);
+    state.favorites = favs;
+    state.docks = docks;
+    if (config.last_update) {
+      state.lastUpdate = config.last_update;
+    } else {
+      state.lastUpdate = fmtFull(new Date());
+    }
+
+    // Load ALL schedules at once (Supabase is fast)
+    const allCodes = state.ships.map(s => s.code);
+    if (allCodes.length) {
+      const map = await loadScheduleFor(allCodes);
+      Object.assign(state.schedules, map);
+    }
+    render();
+
+    // Admin data
+    if (state.user && state.user.role === 'admin') {
+      const [pending, registered] = await Promise.all([
+        loadPendingUsers(),
+        loadRegisteredUsers()
+      ]);
+      state.pendingUsers = pending;
+      state.registeredUsers = registered;
+    }
+  } catch (e) {
+    console.error('Init error:', e);
+    showToast('데이터 로드 중 오류 발생');
+  }
+
+  state.loading = false;
+  render();
+}
+
+/* ===== BOOT ===== */
+render();
+if (state.loggedIn) {
+  initAppData();
+}
+</script>
+</body>
+</html>
