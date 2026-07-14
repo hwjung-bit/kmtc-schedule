@@ -1799,32 +1799,51 @@ function renderShipExpand(ship, schedule, color) {
     );
   }
 
-  // Voyage tabs
+  // Voyage tabs — current + all future voyages
   const voyTab = state.voyTab[code] || 'cur';
-  const tabsDiv = h('div', {className: 'voy-tabs'});
-  const curVoy = schedule.current
-    ? schedule.current.voyage_no : '-';
-  const nextVoy = schedule.next
-    ? schedule.next.voyage_no : '-';
-  tabsDiv.appendChild(
-    h('div', {
-      className: 'voy-tab'
-        + (voyTab === 'cur' ? ' active' : ''),
-      onClick: () => {
-        state.voyTab[code] = 'cur'; render();
-      }
-    }, '현재 ' + curVoy)
+  const now = new Date();
+
+  // Get future voyages (including current)
+  const futureVoyages = schedule.voyages.filter(v =>
+    v.lastEtd && !isNaN(v.lastEtd) && v.lastEtd >= now
   );
-  tabsDiv.appendChild(
-    h('div', {
-      className: 'voy-tab'
-        + (voyTab === 'next' ? ' active' : ''),
-      onClick: () => {
-        state.voyTab[code] = 'next'; render();
-      }
-    }, '다음 ' + nextVoy)
-  );
-  panel.appendChild(tabsDiv);
+  // If none, show last few
+  const showVoyages = futureVoyages.length
+    ? futureVoyages : schedule.voyages.slice(-3);
+
+  if (showVoyages.length > 1) {
+    const tabsDiv = h('div', {
+      className: 'voy-tabs',
+      style: { overflowX: 'auto', flexWrap: 'nowrap' }
+    });
+    showVoyages.forEach((v, i) => {
+      const isCur = schedule.current &&
+        v.voyage_no === schedule.current.voyage_no;
+      const tabKey = v.voyage_no;
+      const active = voyTab === tabKey ||
+        (voyTab === 'cur' && isCur);
+      tabsDiv.appendChild(
+        h('div', {
+          className: 'voy-tab'
+            + (active ? ' active' : ''),
+          style: { flex: '0 0 auto', minWidth: '80px',
+            whiteSpace: 'nowrap', fontSize: '11px' },
+          onClick: () => {
+            state.voyTab[code] = tabKey;
+            renderScheduleBody();
+          }
+        }, (isCur ? '현재 ' : '') + v.voyage_no)
+      );
+    });
+    panel.appendChild(tabsDiv);
+  } else if (showVoyages.length === 1) {
+    panel.appendChild(
+      h('div', {style:{
+        fontSize:'12px',fontWeight:'700',
+        color:'var(--primary)',marginBottom:'10px'
+      }}, '항차 ' + showVoyages[0].voyage_no)
+    );
+  }
 
   // Port call header
   const portHeader = h('div', {style:{
@@ -1849,9 +1868,15 @@ function renderShipExpand(ship, schedule, color) {
   );
   panel.appendChild(portHeader);
 
-  // Port call list
-  const voyage = voyTab === 'next'
-    ? schedule.next : schedule.current;
+  // Find selected voyage
+  let voyage = null;
+  if (voyTab === 'cur' && schedule.current) {
+    voyage = schedule.current;
+  } else {
+    voyage = showVoyages.find(
+      v => v.voyage_no === voyTab
+    ) || showVoyages[0] || schedule.current;
+  }
   if (voyage && voyage.calls) {
     const now = new Date();
     voyage.calls.forEach((call, i) => {
