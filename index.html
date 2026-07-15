@@ -1850,13 +1850,27 @@ function renderShipExpand(ship, schedule, color) {
   const voyTab = state.voyTab[code] || 'cur';
   const now = new Date();
 
-  // Get future voyages (including current)
+  // Get current + future voyages
+  const curVoyNo = schedule.current
+    ? schedule.current.voyage_no : null;
   const futureVoyages = schedule.voyages.filter(v =>
-    v.lastEtd && !isNaN(v.lastEtd) && v.lastEtd >= now
+    (v.lastEtd && !isNaN(v.lastEtd) && v.lastEtd >= now)
+    || v.voyage_no === curVoyNo  // always include current
   );
+  // Dedupe and sort
+  const seen = new Set();
+  const showVoyages = futureVoyages
+    .filter(v => {
+      if (seen.has(v.voyage_no)) return false;
+      seen.add(v.voyage_no); return true;
+    })
+    .sort((a, b) => a.firstEta - b.firstEta);
   // If none, show last few
-  const showVoyages = futureVoyages.length
-    ? futureVoyages : schedule.voyages.slice(-3);
+  if (!showVoyages.length) {
+    schedule.voyages.slice(-3).forEach(v => {
+      if (!seen.has(v.voyage_no)) showVoyages.push(v);
+    });
+  }
 
   if (showVoyages.length > 1) {
     const tabsDiv = h('div', {
@@ -1934,12 +1948,16 @@ function renderShipExpand(ship, schedule, color) {
     });
   }
   if (!voyage) {
-    if (voyTab === 'cur' && schedule.current) {
-      voyage = schedule.current;
+    if (voyTab === 'cur') {
+      voyage = schedule.current || showVoyages[0];
     } else {
       voyage = showVoyages.find(
         v => v.voyage_no === voyTab
-      ) || showVoyages[0] || schedule.current;
+      );
+    }
+    // Fallback: current voyage or first shown
+    if (!voyage) {
+      voyage = schedule.current || showVoyages[0];
     }
   }
   if (voyage && voyage.calls) {
