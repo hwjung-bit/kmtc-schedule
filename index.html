@@ -1952,6 +1952,9 @@ function renderShipExpand(ship, schedule, color) {
         && (i === 0 || parseDate(
           voyage.calls[i-1].etd) <= now);
       const isPast = eta && eta <= now;
+      const isBerthed = isCurrent &&
+        call.arrival_status === 'A' &&
+        call.departure_status !== 'A';
 
       const portCall = h('div', {
         className: 'port-call',
@@ -1962,11 +1965,6 @@ function renderShipExpand(ship, schedule, color) {
           margin: '0 -6px 6px -6px'
         } : {}
       });
-
-      // Check if berthed (arrived but not departed)
-      const isBerthed = isCurrent &&
-        call.arrival_status === 'A' &&
-        call.departure_status !== 'A';
 
       // Dot
       let dotBg, dotBorder;
