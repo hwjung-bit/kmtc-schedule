@@ -676,14 +676,58 @@ async function loadScheduleFor(codes) {
 }
 
 async function loadDocks() {
-  const { data, error } = await sb
+  // 1. Load from docks table (admin-entered)
+  const { data: manualDocks } = await sb
     .from('docks').select('*')
     .order('start_date');
-  if (error) {
-    console.error('docks load error:', error);
-    return [];
-  }
-  return data || [];
+
+  // 2. Load from schedules where direction='D' (API dock voyages)
+  const { data: dockSchedules } = await sb
+    .from('schedules').select('*')
+    .eq('direction', 'D')
+    .order('eta', { ascending: true });
+
+  // Convert D-direction schedules to dock format
+  // Group by vessel_code + voyage_no
+  const voyMap = {};
+  (dockSchedules || []).forEach(r => {
+    const key = r.vessel_code + ':' + r.voyage_no;
+    if (!voyMap[key]) voyMap[key] = [];
+    voyMap[key].push(r);
+  });
+
+  const apiDocks = Object.entries(voyMap).map(
+    ([key, calls]) => {
+      const [code, voyNo] = key.split(':');
+      const sorted = calls.sort(
+        (a, b) => new Date(a.eta) - new Date(b.eta)
+      );
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      // Find ship name
+      const ship = state.ships.find(
+        s => s.code === code
+      );
+      return {
+        id: 'api_' + key,
+        code: code,
+        name: ship ? ship.name : code,
+        start_date: first.eta,
+        end_date: last.etd || last.eta,
+        yard: portShort(last.port_name) || '',
+        port: portShort(first.port_name) || '',
+        voyage_no: voyNo,
+        from_api: true
+      };
+    }
+  );
+
+  // Merge manual + API docks, dedupe by code+date
+  const all = [...(manualDocks || []), ...apiDocks];
+  all.sort((a, b) =>
+    new Date(a.start_date) - new Date(b.start_date)
+  );
+  return all;
 }
 
 async function loadFavorites(email) {
@@ -1869,13 +1913,31 @@ function renderShipExpand(ship, schedule, color) {
   panel.appendChild(portHeader);
 
   // Find selected voyage
+  // If date filter active, auto-select matching voyage
   let voyage = null;
-  if (voyTab === 'cur' && schedule.current) {
-    voyage = schedule.current;
-  } else {
-    voyage = showVoyages.find(
-      v => v.voyage_no === voyTab
-    ) || showVoyages[0] || schedule.current;
+  if (state.dateFrom || state.dateTo) {
+    const fromT = state.dateFrom
+      ? new Date(state.dateFrom + 'T00:00:00') : null;
+    const toT = state.dateTo
+      ? new Date(state.dateTo + 'T23:59:59') : null;
+    voyage = showVoyages.find(v => {
+      return v.calls && v.calls.some(c => {
+        const eta = parseDate(c.eta);
+        if (!eta) return false;
+        if (fromT && eta < fromT) return false;
+        if (toT && eta > toT) return false;
+        return true;
+      });
+    });
+  }
+  if (!voyage) {
+    if (voyTab === 'cur' && schedule.current) {
+      voyage = schedule.current;
+    } else {
+      voyage = showVoyages.find(
+        v => v.voyage_no === voyTab
+      ) || showVoyages[0] || schedule.current;
+    }
   }
   if (voyage && voyage.calls) {
     const now = new Date();
@@ -1889,17 +1951,31 @@ function renderShipExpand(ship, schedule, color) {
       const isPast = eta && eta <= now;
 
       const portCall = h('div', {
-        className: 'port-call'
+        className: 'port-call',
+        style: isBerthed ? {
+          background: '#e8f5e9',
+          borderRadius: '8px',
+          padding: '8px 6px 8px 0',
+          margin: '0 -6px 6px -6px'
+        } : {}
       });
+
+      // Check if berthed (arrived but not departed)
+      const isBerthed = isCurrent &&
+        call.arrival_status === 'A' &&
+        call.departure_status !== 'A';
 
       // Dot
       let dotBg, dotBorder;
       if (isSkip) {
         dotBg = '#c0392b';
         dotBorder = '#c0392b';
+      } else if (isBerthed) {
+        dotBg = '#e8f5e9';
+        dotBorder = '#2e7d32';
       } else if (isCurrent) {
-        dotBg = color;
-        dotBorder = color;
+        dotBg = '#2e7d32';
+        dotBorder = '#2e7d32';
       } else if (isPast) {
         dotBg = '#c3ccda';
         dotBorder = '#c3ccda';
@@ -1927,9 +2003,10 @@ function renderShipExpand(ship, schedule, color) {
       info.appendChild(
         h('span', {className: 'port-name',
           style: {
-            fontWeight: isCurrent ? '800' : '500',
+            fontWeight: (isCurrent || isBerthed) ? '800' : '500',
             color: isSkip ? '#c0392b'
-              : isCurrent ? '#0b4f96'
+              : isBerthed ? '#2e7d32'
+              : isCurrent ? '#2e7d32'
               : isPast ? '#a3adbd'
               : 'var(--ink2)',
             textDecoration: isSkip
