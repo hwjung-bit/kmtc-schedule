@@ -1948,20 +1948,27 @@ function renderShipExpand(ship, schedule, color) {
       const eta = parseDate(call.eta);
       const etd = parseDate(call.etd);
       const isSkip = call.skip;
-      const isPast = eta && etd && eta <= now
+      const isPast = eta && eta <= now
         && call.departure_status === 'A';
       // Berthed = arrived but not departed yet
       const isBerthed = eta && eta <= now
         && call.arrival_status === 'A'
         && call.departure_status !== 'A';
-      // Next port = first port with ETA in future
-      const isNext = !isPast && !isBerthed
-        && eta && eta > now
-        && (i === 0 || !voyage.calls.slice(0, i).some(
-          c => parseDate(c.eta) > now
-            && c.departure_status !== 'A'
-            && !c.skip
-        ));
+      // Only mark "next" in the CURRENT voyage (not future voyages)
+      const isCurrentVoyage = schedule.current &&
+        voyage.voyage_no === schedule.current.voyage_no;
+      // Next port = first future port, only in current voyage
+      let isNext = false;
+      if (isCurrentVoyage && !isPast && !isBerthed
+          && eta && eta > now) {
+        // Check no earlier port in this voyage is also future
+        const earlierFuture = voyage.calls.slice(0, i)
+          .some(c => {
+            const ce = parseDate(c.eta);
+            return ce && ce > now && c.departure_status !== 'A';
+          });
+        if (!earlierFuture) isNext = true;
+      }
       const isCurrent = isBerthed || isNext;
 
       const portCall = h('div', {
