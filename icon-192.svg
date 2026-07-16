@@ -1,0 +1,12 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='192' height='192' viewBox='0 0 192 192'>
+  <defs>
+    <linearGradient id='bg' x1='0' y1='0' x2='1' y2='1'>
+      <stop offset='0%' stop-color='#0a4e96'/>
+      <stop offset='100%' stop-color='#023a76'/>
+    </linearGradient>
+  </defs>
+  <rect width='192' height='192' rx='38' fill='url(#bg)'/>
+  <text x='96' y='85' text-anchor='middle' font-family='Arial,sans-serif' font-weight='900' font-size='52' fill='white' letter-spacing='2'>KMTC</text>
+  <text x='96' y='125' text-anchor='middle' font-family='Arial,sans-serif' font-weight='600' font-size='20' fill='#8fb6e6' letter-spacing='6'>SCHEDULE</text>
+  <text x='96' y='158' text-anchor='middle' font-size='36'>🚢</text>
+</svg>
