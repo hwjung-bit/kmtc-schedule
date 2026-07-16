@@ -2560,9 +2560,9 @@ function renderPortTab(container) {
       '\u{1F50D} 항구 검색')
   );
 
-  // Search — two fields: port + ship
+  // Search — two fields: port + ship (stacked)
   const searchRow = h('div', {style:{
-    display:'flex',gap:'6px',alignItems:'center'
+    display:'flex',flexDirection:'column',gap:'6px'
   }});
 
   // Port search
