@@ -593,6 +593,7 @@ const state = {
   loginEmail: '',
   loginPassword: '',
   loginError: '',
+  loginLoading: false,
   regEmail: '', regName: '', regPassword: '', regPasswordConfirm: '',
   regDept: '', regPurpose: '', regError: '',
   forgotEmail: '', forgotMsg: '', forgotErr: '',
@@ -850,7 +851,8 @@ async function doLogin(email, password) {
     return { error: '접근이 거부된 계정입니다.' };
   }
   if (user.password_hash !== hash) {
-    return { error: '비밀번호가 일치하지 않습니다.' };
+    // Password is case-sensitive
+    return { error: '비밀번호가 일치하지 않습니다. (대소문자 구분)' };
   }
   return { user };
 }
@@ -1173,6 +1175,12 @@ function renderLogin(app) {
     });
     form.appendChild(emailInput);
     form.appendChild(pwInput);
+    form.appendChild(
+      h('div', {style:{
+        fontSize:'11px',color:'rgba(255,255,255,.4)',
+        padding:'2px 4px'
+      }}, '※ 이메일은 대소문자 무관, 비밀번호는 대소문자 구분')
+    );
 
     if (state.loginError) {
       form.appendChild(
@@ -1183,7 +1191,7 @@ function renderLogin(app) {
     const btn = h('button', {
       className: 'login-btn',
       onClick: handleLogin
-    }, '로그인');
+    }, state.loginLoading ? '로그인 중...' : '로그인');
     form.appendChild(btn);
     center.appendChild(form);
 
@@ -1364,9 +1372,13 @@ function renderLogin(app) {
 }
 
 async function handleLogin() {
+  state.loginError = '';
+  state.loginLoading = true;
+  render();
   const res = await doLogin(
     state.loginEmail, state.loginPassword
   );
+  state.loginLoading = false;
   if (res.error) {
     state.loginError = res.error;
     render();
