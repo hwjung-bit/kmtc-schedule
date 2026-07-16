@@ -987,16 +987,20 @@ function getShipPosition(rawRows, shipCode) {
 
   // If berthed somewhere
   if (berthedAt) {
-    const bEta = parseDate(berthedAt.eta);
-    // Berthed: find next port after this
+    // Find next unarrived port after berthed port
     const bIdx = sorted.indexOf(berthedAt);
-    const nextPort = sorted[bIdx + 1];
+    let nextPort = null;
+    for (let j = bIdx + 1; j < sorted.length; j++) {
+      if (sorted[j].arrival_status !== 'A') {
+        nextPort = sorted[j]; break;
+      }
+    }
     return {
       status: { label: '접안중', color: '#0064B4',
         bg: '#e8f1fb', icon: '⚓' },
       from: portShort(berthedAt.port_name, berthedAt.port_code),
       to: nextPort ? portShort(nextPort.port_name, nextPort.port_code) : '',
-      eta: bEta,
+      eta: nextPort ? parseDate(nextPort.eta) : parseDate(berthedAt.eta),
       voyage: berthedAt.voyage_no || ''
     };
   }
