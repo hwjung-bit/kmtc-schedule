@@ -2560,22 +2560,22 @@ function renderPortTab(container) {
       '\u{1F50D} 항구 검색')
   );
 
-  // Search — two fields: port + ship (stacked)
+  // Search — two fields: port + ship (side by side)
   const searchRow = h('div', {style:{
-    display:'flex',flexDirection:'column',gap:'6px'
+    display:'flex',gap:'6px',alignItems:'center'
   }});
 
   // Port search
   const portBox = h('div', {
     className: 'search-box',
-    style: { height: '40px', flex: '1' }
+    style: { height: '42px', flex: '1' }
   });
   portBox.appendChild(
-    h('span', {style:{opacity:'0.8',fontSize:'12px'}}, '⚓')
+    h('span', {style:{opacity:'0.8',fontSize:'11px'}}, '⚓')
   );
   const portInp = h('input', {
     id: 'port-search',
-    placeholder: '항구명 (예: 부산, BUSAN)',
+    placeholder: '항구명',
     value: state.portQuery,
     style: { fontSize: '13px' }
   });
@@ -2597,14 +2597,14 @@ function renderPortTab(container) {
   // Ship search
   const shipBox = h('div', {
     className: 'search-box',
-    style: { height: '40px', flex: '1' }
+    style: { height: '42px', flex: '1' }
   });
   shipBox.appendChild(
-    h('span', {style:{opacity:'0.8',fontSize:'12px'}}, '🚢')
+    h('span', {style:{opacity:'0.8',fontSize:'11px'}}, '🚢')
   );
   const shipInp = h('input', {
     id: 'port-ship-search',
-    placeholder: '선명 (예: KPS)',
+    placeholder: '선명',
     value: state.portShipQuery,
     style: { fontSize: '13px' }
   });
