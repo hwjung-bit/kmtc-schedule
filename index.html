@@ -418,139 +418,55 @@ function fmtDateISO(d) {
     + String(d.getMonth()+1).padStart(2,'0') + '-'
     + String(d.getDate()).padStart(2,'0');
 }
-// Port code → display name (based on actual API port codes)
+// Only consolidate terminal-level codes to their parent port
+// Everything else: use port_code as-is from API
 const PORT_CONSOLIDATE = {
-  // Korea
-  'PUS':'BUSAN','PNC':'BUSAN','HBGT':'BUSAN','HBCT':'BUSAN',
-  'DGT':'BUSAN','BPT':'BUSAN','BPTS':'BUSAN','BNCT':'BUSAN',
-  'HJNC':'BUSAN','HPNT':'BUSAN','UNCT':'BUSAN',
-  'PUSAN':'BUSAN','PUSAN NEW CONTAINER TMNL':'BUSAN',
-  'USN':'ULSAN',
-  'KAN':'GWANGYANG','KWANGYANG':'GWANGYANG',
-  'INC':'INCHEON','INCHON':'INCHEON',
-  'PTK':'PYEONGTAEK',
-  'KPO':'POHANG',
-  'DSN':'DAESAN',
-  // China
-  'SHA':'SHANGHAI',
-  'NBO':'NINGBO',
-  'TAO':'QINGDAO',
-  'XGG':'XINGANG',
-  'SHK':'SHEKOU',
-  'DCB':'DA CHAN BAY',
-  'NNS':'NANSHA',
-  'XMN':'XIAMEN',
-  'LYG':'LIANYUNGANG',
-  'FQG':'FUQING',
-  'WEI':'WEIHAI',
-  'SWA':'SHANTOU',
-  'ZOS':'ZHOUSHAN',
-  // Hong Kong / Taiwan
-  'HKG':'HONG KONG',
-  'KEL':'KEELUNG',
-  'KHH':'KAOHSIUNG',
-  'TXG':'TAICHUNG',
-  // Japan
-  'HKT':'HAKATA','OSA':'OSAKA','NGO':'NAGOYA',
-  'TYO':'TOKYO','YOK':'YOKOHAMA','UKB':'KOBE',
-  'SMZ':'SHIMIZU','KWS':'KAWASAKI','YKK':'YOKKAICHI',
-  'THS':'TOYOHASHI','KIJ':'NIIGATA','MYJ':'MATSUYAMA',
-  'IMB':'IMABARI','IYM':'IYOMISHIMA','TKS':'TOKUSHIMA',
-  'TAK':'TAKAMATSU','MIZ':'MIZUSHIMA','HIJ':'HIROSHIMA',
-  'FKY':'FUKUYAMA','OIT':'OITA','SDJ':'SENDAI',
-  'TMK':'TOMAKOMAI','KUH':'KUSHIRO','MUR':'MURORAN',
-  'ISI':'ISHIKARI','HHE':'HACHINOHE','AXT':'AKITA',
-  'HTA':'HITACHINAKA','ONA':'ONAHAMA',
-  'MAI':'MAIZURU','SMN':'SAKAIMINATO','KNZ':'KANAZAWA',
-  'TRG':'TSURUGA','SKT':'SAKATA','TOS':'TOYAMA',
-  'IMI':'IMARI','KIS':'KAMAISHI','CHB':'CHIBA',
-  'IWK':'IWAKUNI','TKY':'TOKUYAMA',
-  // SE Asia
-  'SIN':'SINGAPORE',
-  'SGN':'HOCHIMINH',
-  'HPH':'HAIPHONG',
-  'CMP':'CAI MEP',
-  'LCH':'LAEMCHABANG',
-  'BKK':'BANGKOK',
-  'PKG':'PORT KLANG','PKW':'PORT KLANG',
-  'PEN':'PENANG',
-  'PGU':'PASIR GUDANG',
-  'JKT':'JAKARTA',
-  'SUB':'SURABAYA',
-  'MNL':'MANILA','MIP':'MANILA',
-  // India / Middle East
-  'MAA':'CHENNAI','MADRAS':'CHENNAI',
-  'NSA':'NHAVA SHEVA',
-  'MUN':'MUNDRA',
-  'CMB':'COLOMBO',
-  'KTP':'KATUPALLI',
-  'HZR':'HAZIRA',
-  'VTZ':'VISHAKHAPATNAM',
-  'KHI':'KARACHI',
-  'JEA':'JEBEL ALI',
-  'DMM':'DAMMAM',
-  'SOH':'SOHAR',
-  'KLF':'KHOR AL FAKKAN',
-  'KSP':'KHALIFA PORT',
-  'HMA':'HAMAD',
-  // Africa
-  'MBA':'MOMBASA',
-  'DAR':'DAR ES SALAAM',
-  // Americas
-  'LGB':'LONG BEACH',
-  'ZLO':'MANZANILLO',
+  // Busan terminals → PUS
+  'PNC':'PUS','HBGT':'PUS','HBCT':'PUS','DGT':'PUS',
+  'BPT':'PUS','BPTS':'PUS','BNCT':'PUS','HJNC':'PUS',
+  'HPNT':'PUS','UNCT':'PUS',
+  'PUSAN NEW CONTAINER TMNL':'PUS',
+  // Port Klang terminals
+  'PKW':'PKG',
+  // Manila duplicate
+  'MIP':'MNL',
+  // Chennai / Madras
+  'MADRAS':'MAA',
 };
 
-// Search aliases: common abbreviations + Korean → canonical name
+// Korean search → port_code mapping
 const SEARCH_ALIAS = {
-  // Korean
-  'BUS':'BUSAN','부산':'BUSAN',
-  'ULS':'ULSAN','울산':'ULSAN',
-  'GWY':'GWANGYANG','광양':'GWANGYANG',
-  'ICN':'INCHEON','인천':'INCHEON',
-  '평택':'PYEONGTAEK','포항':'POHANG',
-  // China
-  '상하이':'SHANGHAI','닝보':'NINGBO',
-  '칭다오':'QINGDAO','QDO':'QINGDAO',
-  '션전':'SHEKOU','SZX':'SHEKOU',
-  '톈진':'XINGANG','TJN':'XINGANG',
-  '난사':'NANSHA','샤먼':'XIAMEN',
-  '저우산':'ZHOUSHAN',
-  // HK/TW
-  '홍콩':'HONG KONG','기륭':'KEELUNG','가오슝':'KAOHSIUNG',
-  // Japan
-  '하카타':'HAKATA','오사카':'OSAKA','나고야':'NAGOYA',
-  '도쿄':'TOKYO','요코하마':'YOKOHAMA','고베':'KOBE',
-  // SE Asia
-  '싱가포르':'SINGAPORE',
-  '호치민':'HOCHIMINH','HCM':'HOCHIMINH',
-  '하이퐁':'HAIPHONG',
-  '람차방':'LAEMCHABANG','LCB':'LAEMCHABANG',
-  '방콕':'BANGKOK',
-  '포트클랑':'PORT KLANG',
-  '자카르타':'JAKARTA',
-  '마닐라':'MANILA',
-  // India/ME
-  '첸나이':'CHENNAI',
-  '나바셰바':'NHAVA SHEVA','뭄바이':'NHAVA SHEVA',
-  '문드라':'MUNDRA',
-  '콜롬보':'COLOMBO',
-  '제벨알리':'JEBEL ALI','JBL':'JEBEL ALI',
-  '담맘':'DAMMAM','카라치':'KARACHI',
+  '부산':'PUS','울산':'USN','광양':'KAN','인천':'INC',
+  '평택':'PTK','포항':'KPO','대산':'DSN',
+  '상하이':'SHA','닝보':'NBO','칭다오':'TAO',
+  '션전':'SHK','톈진':'XGG','난사':'NNS','샤먼':'XMN',
+  '저우산':'ZOS','웨이하이':'WEI',
+  '홍콩':'HKG','기륭':'KEL','가오슝':'KHH',
+  '하카타':'HKT','오사카':'OSA','나고야':'NGO',
+  '도쿄':'TYO','요코하마':'YOK','고베':'UKB',
+  '싱가포르':'SIN','호치민':'SGN','하이퐁':'HPH',
+  '람차방':'LCH','방콕':'BKK','자카르타':'JKT',
+  '마닐라':'MNL','포트클랑':'PKG',
+  '첸나이':'MAA','나바셰바':'NSA','뭄바이':'NSA',
+  '문드라':'MUN','콜롬보':'CMB',
+  '제벨알리':'JEA','담맘':'DMM','카라치':'KHI',
 };
 
-function portShort(name) {
-  if (!name) return '';
-  const raw = name.split(',')[0].trim();
-  const up = raw.toUpperCase();
-  // Check consolidation map
-  if (PORT_CONSOLIDATE[up]) return PORT_CONSOLIDATE[up];
-  // Partial match for BUSAN variants
-  if (up.includes('PUSAN') || up.includes('BUSAN')) return 'BUSAN';
-  if (up.includes('KWANGYANG') || up.includes('GWANGYANG')) return 'GWANGYANG';
-  if (up.includes('ULSAN')) return 'ULSAN';
-  if (up.includes('INCHEON')) return 'INCHEON';
-  return raw;
+/**
+ * Display port name: use port_code as primary identifier.
+ * port_code comes directly from KMTC API (PUS, KAN, HKG, SIN etc.)
+ * port_name used as fallback only.
+ */
+function portShort(nameOrRow, portCode) {
+  // If called with a schedule row object
+  if (nameOrRow && typeof nameOrRow === 'object') {
+    return nameOrRow.port_code || nameOrRow.port_name?.split(',')[0]?.trim() || '';
+  }
+  // If port_code provided, use it
+  if (portCode) return portCode;
+  // Fallback: extract from port_name string
+  if (!nameOrRow) return '';
+  return nameOrRow.split(',')[0].trim();
 }
 function numFmt(n) {
   return (n||0).toLocaleString();
@@ -848,8 +764,8 @@ async function loadDocks() {
         name: ship ? ship.name : code,
         start_date: first.eta,
         end_date: last.etd || last.eta,
-        yard: portShort(last.port_name) || '',
-        port: portShort(first.port_name) || '',
+        yard: portShort(last.port_name, last.port_code) || '',
+        port: portShort(first.port_name, first.port_code) || '',
         voyage_no: voyNo,
         from_api: true
       };
@@ -1085,8 +1001,8 @@ function getShipPosition(rawRows) {
     return {
       status: { label: '접안중', color: '#0064B4',
         bg: '#e8f1fb', icon: '⚓' },
-      from: portShort(berthedAt.port_name),
-      to: nextPort ? portShort(nextPort.port_name) : '',
+      from: portShort(berthedAt.port_name, berthedAt.port_code),
+      to: nextPort ? portShort(nextPort.port_name, nextPort.port_code) : '',
       eta: bEta,
       voyage: berthedAt.voyage_no || ''
     };
@@ -1099,8 +1015,8 @@ function getShipPosition(rawRows) {
       return {
         status: { label: '운항중', color: '#1b7a3d',
           bg: '#e6f4ea', icon: '▶' },
-        from: portShort(lastDeparted.port_name),
-        to: portShort(nextCall.port_name),
+        from: portShort(lastDeparted.port_name, lastDeparted.port_code),
+        to: portShort(nextCall.port_name, nextCall.port_code),
         eta: parseDate(nextCall.eta),
         voyage: nextCall.voyage_no || ''
       };
@@ -1119,7 +1035,7 @@ function getShipPosition(rawRows) {
       status: { label: '운항중', color: '#1b7a3d',
         bg: '#e6f4ea', icon: '▶' },
       from: prevPort ? portShort(prevPort.port_name) : '',
-      to: portShort(nextFuture.port_name),
+      to: portShort(nextFuture.port_name, nextFuture.port_code),
       eta: parseDate(nextFuture.eta),
       voyage: nextFuture.voyage_no || ''
     };
@@ -1130,7 +1046,7 @@ function getShipPosition(rawRows) {
   return {
     status: { label: '정보없음', color: '#97a2b5',
       bg: '#eef1f6', icon: '—' },
-    from: portShort(last.port_name),
+    from: portShort(last.port_name, last.port_code),
     to: '',
     eta: null,
     voyage: last.voyage_no || ''
@@ -2238,7 +2154,7 @@ function renderShipExpand(ship, schedule, color) {
 
       // Info
       const info = h('div', {className: 'port-info'});
-      let label = portShort(call.port_name);
+      let label = portShort(call.port_name, call.port_code);
       if (call.terminal) {
         // Show only terminal code (first word), not full name
         const tCode = call.terminal.split(' ')[0];
@@ -2907,7 +2823,7 @@ function renderCombinedSearch(body) {
 
     rows.forEach(r => {
       // Filter by port query
-      const pn = portShort(r.port_name || '').toUpperCase();
+      const pn = portShort(r.port_name || '', r.port_code || '').toUpperCase();
       const pc = (r.port_code || '').toUpperCase();
       // Also consolidate port_code
       const pcResolved = (PORT_CONSOLIDATE[pc] || '').toUpperCase();
@@ -2969,7 +2885,7 @@ function renderCombinedSearch(body) {
               color:'var(--ink)'}}, c.vessel_code),
             h('span', {style:{fontSize:'11px',
               color:'var(--ink3)'}},
-              portShort(c.port_name)),
+              portShort(c.port_name, c.port_code)),
             tCode ? h('span', {style:{
               fontSize:'10px',fontFamily:'Inter',
               fontWeight:'700',color:'#0064B4',
