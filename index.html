@@ -1001,9 +1001,16 @@ function getShipPosition(rawRows, shipCode) {
     };
   }
 
-  // If sailing: last departed → next port
-  if (lastDeparted && lastDepartedIdx >= 0) {
-    const nextCall = sorted[lastDepartedIdx + 1];
+  // If sailing: last departed → first future unarrived port
+  const now = new Date();
+  if (lastDeparted) {
+    const lastDepTime = parseDate(lastDeparted.etd);
+    // Find first port with ETA after last departure, not yet arrived
+    const nextCall = sorted.find(c => {
+      const cEta = parseDate(c.eta);
+      return cEta && lastDepTime && cEta > lastDepTime
+        && c.arrival_status !== 'A';
+    });
     if (nextCall) {
       return {
         status: { label: '운항중', color: '#1b7a3d',
@@ -1016,18 +1023,22 @@ function getShipPosition(rawRows, shipCode) {
     }
   }
 
-  // Fallback: find first future port
-  const now = new Date();
+  // Fallback: first future port
   const nextFuture = sorted.find(
-    c => parseDate(c.eta) > now
+    c => parseDate(c.eta) > now && c.arrival_status !== 'A'
   );
   if (nextFuture) {
-    const nIdx = sorted.indexOf(nextFuture);
-    const prevPort = nIdx > 0 ? sorted[nIdx - 1] : null;
+    // Find last port before this one that was departed
+    let prevPort = null;
+    for (let i = sorted.indexOf(nextFuture) - 1; i >= 0; i--) {
+      if (sorted[i].departure_status === 'A') {
+        prevPort = sorted[i]; break;
+      }
+    }
     return {
       status: { label: '운항중', color: '#1b7a3d',
         bg: '#e6f4ea', icon: '▶' },
-      from: prevPort ? portShort(prevPort.port_name) : '',
+      from: prevPort ? portShort(prevPort.port_name, prevPort.port_code) : '',
       to: portShort(nextFuture.port_name, nextFuture.port_code),
       eta: parseDate(nextFuture.eta),
       voyage: nextFuture.voyage_no || ''
