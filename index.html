@@ -2825,8 +2825,8 @@ function renderPortTab(container) {
   // Body
   const body = h('div', {style:{padding:'16px'}});
 
-  if (state.portQuery && state.portShipQuery) {
-    // Combined search — show matching port calls directly
+  if (state.portQuery || state.portShipQuery) {
+    // Search — show matching port calls
     renderCombinedSearch(body);
   } else if (state.selectedPort) {
     renderPortDetail(body);
@@ -2865,10 +2865,13 @@ function renderCombinedSearch(body) {
       // Also consolidate port_code
       const pcResolved = (PORT_CONSOLIDATE[pc] || '').toUpperCase();
       const kr = PORT_KR[pn] || '';
-      const portMatch = pn.includes(pq) || pc.includes(pq)
-        || pcResolved.includes(pq)
-        || (rawPq && kr.includes(rawPq));
-      if (!portMatch) return;
+      // If port query is empty, show all ports for this vessel
+      if (pq) {
+        const portMatch = pn.includes(pq) || pc.includes(pq)
+          || pcResolved.includes(pq)
+          || (rawPq && kr.includes(rawPq));
+        if (!portMatch) return;
+      }
 
       // Only future calls
       const eta = parseDate(r.eta);
@@ -2882,7 +2885,7 @@ function renderCombinedSearch(body) {
 
   body.appendChild(
     h('div', {className: 'section-label'},
-      sq + ' → ' + pq + ' 스케줄 (' + results.length + '건)')
+      (sq || '전체') + (pq ? ' → ' + pq : '') + ' 스케줄 (' + results.length + '건)')
   );
 
   if (!results.length) {
