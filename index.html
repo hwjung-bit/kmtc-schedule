@@ -86,7 +86,7 @@ input[type=date]{color-scheme:light}
 /* ===== App Shell ===== */
 #app{display:flex;flex-direction:column;
   height:100dvh;min-height:0;position:relative;
-  max-width:600px;margin:0 auto;
+  max-width:480px;margin:0 auto;
   background:var(--page)}
 
 /* ===== Tab Content ===== */
@@ -2568,14 +2568,11 @@ function renderPortTab(container) {
   // Port search
   const portBox = h('div', {
     className: 'search-box',
-    style: { height: '42px', flex: '1' }
+    style: { height: '42px', flex: '1', padding: '0 8px' }
   });
-  portBox.appendChild(
-    h('span', {style:{opacity:'0.8',fontSize:'11px'}}, '⚓')
-  );
   const portInp = h('input', {
     id: 'port-search',
-    placeholder: '항구명',
+    placeholder: '⚓ 항구명',
     value: state.portQuery,
     style: { fontSize: '13px' }
   });
@@ -2597,14 +2594,11 @@ function renderPortTab(container) {
   // Ship search
   const shipBox = h('div', {
     className: 'search-box',
-    style: { height: '42px', flex: '1' }
+    style: { height: '42px', flex: '1', padding: '0 8px' }
   });
-  shipBox.appendChild(
-    h('span', {style:{opacity:'0.8',fontSize:'11px'}}, '🚢')
-  );
   const shipInp = h('input', {
     id: 'port-ship-search',
-    placeholder: '선명',
+    placeholder: '🚢 선명',
     value: state.portShipQuery,
     style: { fontSize: '13px' }
   });
