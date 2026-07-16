@@ -966,22 +966,26 @@ function getShipPosition(rawRows, shipCode) {
     };
   }
 
-  // Find: last port where ship departed (departure_status='A')
+  // Simple time-based position: ETD < now = departed, ETA < now = arrived
+  const now = new Date();
   let lastDeparted = null;
-  let lastDepartedIdx = -1;
-  // Find: port where ship is berthed (arrival='A', departure!='A')
   let berthedAt = null;
 
   for (let i = sorted.length - 1; i >= 0; i--) {
     const c = sorted[i];
-    if (!berthedAt && c.arrival_status === 'A'
-        && c.departure_status !== 'A') {
+    const cEta = parseDate(c.eta);
+    const cEtd = parseDate(c.etd);
+    const arrived = cEta && cEta <= now;
+    const departed = cEtd && cEtd <= now;
+
+    // Berthed = arrived but not yet departed
+    if (!berthedAt && arrived && !departed) {
       berthedAt = c;
     }
-    if (!lastDeparted && c.departure_status === 'A') {
+    // Last departed port
+    if (!lastDeparted && departed) {
       lastDeparted = c;
-      lastDepartedIdx = i;
-      break; // found the latest confirmed departure
+      break;
     }
   }
 
