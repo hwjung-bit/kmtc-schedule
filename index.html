@@ -739,58 +739,15 @@ async function loadScheduleFor(codes) {
 }
 
 async function loadDocks() {
-  // 1. Load from docks table (admin-entered)
-  const { data: manualDocks } = await sb
+  // Load from docks table only (spreadsheet-based, accurate)
+  const { data, error } = await sb
     .from('docks').select('*')
     .order('start_date');
-
-  // 2. Load from schedules where direction='D' (API dock voyages)
-  const { data: dockSchedules } = await sb
-    .from('schedules').select('*')
-    .eq('direction', 'D')
-    .order('eta', { ascending: true });
-
-  // Convert D-direction schedules to dock format
-  // Group by vessel_code + voyage_no
-  const voyMap = {};
-  (dockSchedules || []).forEach(r => {
-    const key = r.vessel_code + ':' + r.voyage_no;
-    if (!voyMap[key]) voyMap[key] = [];
-    voyMap[key].push(r);
-  });
-
-  const apiDocks = Object.entries(voyMap).map(
-    ([key, calls]) => {
-      const [code, voyNo] = key.split(':');
-      const sorted = calls.sort(
-        (a, b) => new Date(a.eta) - new Date(b.eta)
-      );
-      const first = sorted[0];
-      const last = sorted[sorted.length - 1];
-      // Find ship name
-      const ship = state.ships.find(
-        s => s.code === code
-      );
-      return {
-        id: 'api_' + key,
-        code: code,
-        name: ship ? ship.name : code,
-        start_date: first.eta,
-        end_date: last.etd || last.eta,
-        yard: portShort(last.port_name, last.port_code) || '',
-        port: portShort(first.port_name, first.port_code) || '',
-        voyage_no: voyNo,
-        from_api: true
-      };
-    }
-  );
-
-  // Merge manual + API docks, dedupe by code+date
-  const all = [...(manualDocks || []), ...apiDocks];
-  all.sort((a, b) =>
-    new Date(a.start_date) - new Date(b.start_date)
-  );
-  return all;
+  if (error) {
+    console.error('docks load error:', error);
+    return [];
+  }
+  return data || [];
 }
 
 async function loadFavorites(email) {
@@ -2504,21 +2461,23 @@ function renderDockItem(d, phase) {
     className: 'dock-card'
       + (phase === 'current' ? ' current' : '')
   }, [
-    h('div', {style:{minWidth:'0'}}, [
+    h('div', {style:{minWidth:'0',flex:'1'}}, [
       h('div', {style:{
-        display:'flex',alignItems:'baseline',gap:'8px'
+        display:'flex',alignItems:'center',gap:'8px'
       }}, [
         h('span', {style:{fontFamily:'Inter',
           fontWeight:'800',fontSize:'15px',
           color:'var(--ink)'}}, d.code),
-        h('span', {style:{fontSize:'12px',
-          color:'var(--ink2)',fontWeight:'600',
-          fontFamily:'Inter'}}, period)
+        h('span', {style:{fontSize:'11px',
+          fontWeight:'700',
+          color: phase === 'current' ? '#c25d00' : '#0064B4',
+          background: phase === 'current' ? '#fff3e0' : '#e8f1fb',
+          padding:'2px 7px',borderRadius:'8px'
+        }}, d.yard || '미정')
       ]),
-      h('div', {style:{marginTop:'2px',fontSize:'11px',
-        color:'var(--ink3)'}},
-        '\u{1F4CD} ' + (d.yard||'') + ' \xB7 '
-        + (d.port||''))
+      h('div', {style:{marginTop:'4px',fontSize:'12px',
+        color:'var(--ink2)',fontFamily:'Inter',
+        fontWeight:'600'}}, period + ' (' + days + '일)')
     ]),
     h('span', {style:{
       flex:'0 0 auto',fontFamily:'Inter',
