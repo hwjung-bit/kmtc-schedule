@@ -1010,7 +1010,6 @@ function getShipPosition(rawRows, shipCode) {
   }
 
   // If sailing: last departed → first future unarrived port
-  const now = new Date();
   if (lastDeparted) {
     const lastDepTime = parseDate(lastDeparted.etd);
     // Find first port with ETA after last departure, not yet arrived
