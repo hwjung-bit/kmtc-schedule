@@ -575,6 +575,7 @@ const state = {
 
   // Port tab
   portQuery: '',
+  portShipQuery: '',
   portRegion: '전체',
   selectedPort: null,
   openRegions: {},
@@ -2559,34 +2560,81 @@ function renderPortTab(container) {
       '\u{1F50D} 항구 검색')
   );
 
-  // Search
-  const searchBox = h('div', {
+  // Search — two fields: port + ship
+  const searchRow = h('div', {style:{
+    display:'flex',gap:'6px',alignItems:'center'
+  }});
+
+  // Port search
+  const portBox = h('div', {
     className: 'search-box',
-    style: { height: '44px' }
+    style: { height: '40px', flex: '1' }
   });
-  searchBox.appendChild(
-    h('span', {style:{opacity:'0.8'}}, '\u{1F50D}')
+  portBox.appendChild(
+    h('span', {style:{opacity:'0.8',fontSize:'12px'}}, '⚓')
   );
-  const inp = h('input', {
+  const portInp = h('input', {
     id: 'port-search',
-    placeholder: '항구명 또는 코드 검색',
+    placeholder: '항구명 (예: 부산, BUSAN)',
     value: state.portQuery,
-    style: { fontSize: '14px' }
+    style: { fontSize: '13px' }
   });
-  inp.addEventListener('input', e => {
+  portInp.addEventListener('input', e => {
     state.portQuery = e.target.value;
     state.selectedPort = null;
     render();
   });
-  searchBox.appendChild(inp);
+  portBox.appendChild(portInp);
   if (state.portQuery) {
-    searchBox.appendChild(
+    portBox.appendChild(
       h('span', {className:'clear-x', onClick: () => {
         state.portQuery = ''; render();
       }}, '\u2715')
     );
   }
-  header.appendChild(searchBox);
+  searchRow.appendChild(portBox);
+
+  // Ship search
+  const shipBox = h('div', {
+    className: 'search-box',
+    style: { height: '40px', flex: '1' }
+  });
+  shipBox.appendChild(
+    h('span', {style:{opacity:'0.8',fontSize:'12px'}}, '🚢')
+  );
+  const shipInp = h('input', {
+    id: 'port-ship-search',
+    placeholder: '선명 (예: KPS)',
+    value: state.portShipQuery,
+    style: { fontSize: '13px' }
+  });
+  shipInp.addEventListener('input', e => {
+    state.portShipQuery = e.target.value;
+    render();
+  });
+  shipBox.appendChild(shipInp);
+  if (state.portShipQuery) {
+    shipBox.appendChild(
+      h('span', {className:'clear-x', onClick: () => {
+        state.portShipQuery = ''; render();
+      }}, '\u2715')
+    );
+  }
+  searchRow.appendChild(shipBox);
+  header.appendChild(searchRow);
+
+  // Combined search results
+  if (state.portQuery && state.portShipQuery) {
+    // Both filters → show matching port calls directly
+    header.appendChild(
+      h('div', {style:{
+        marginTop:'8px',fontSize:'11px',
+        color:'#a9c8ee',fontWeight:'600'
+      }}, '🔍 ' + state.portShipQuery.toUpperCase()
+        + ' → ' + state.portQuery.toUpperCase()
+        + ' 검색 결과')
+    );
+  }
 
   // Region chips
   const chips = h('div', {style:{
@@ -2621,12 +2669,131 @@ function renderPortTab(container) {
   // Body
   const body = h('div', {style:{padding:'16px'}});
 
-  if (state.selectedPort) {
+  if (state.portQuery && state.portShipQuery) {
+    // Combined search — show matching port calls directly
+    renderCombinedSearch(body);
+  } else if (state.selectedPort) {
     renderPortDetail(body);
   } else {
     renderPortList(body);
   }
   container.appendChild(body);
+}
+
+function renderCombinedSearch(body) {
+  const pq = (state.portQuery || '').trim().toUpperCase();
+  const sq = (state.portShipQuery || '').trim().toUpperCase();
+  const rawPq = (state.portQuery || '').trim();
+
+  // Find matching port calls from all schedules
+  const now = new Date();
+  const results = [];
+
+  Object.entries(state.schedules).forEach(([code, rows]) => {
+    // Filter by ship query
+    if (sq) {
+      const ship = state.ships.find(s => s.code === code);
+      const codeMatch = code.toUpperCase().includes(sq);
+      const nameMatch = ship && (ship.name || '').toUpperCase().includes(sq);
+      if (!codeMatch && !nameMatch) return;
+    }
+
+    rows.forEach(r => {
+      // Filter by port query
+      const pn = portShort(r.port_name || '').toUpperCase();
+      const pc = (r.port_code || '').toUpperCase();
+      const kr = PORT_KR[pn] || '';
+      const portMatch = pn.includes(pq) || pc.includes(pq)
+        || (rawPq && kr.includes(rawPq));
+      if (!portMatch) return;
+
+      // Only future calls
+      const eta = parseDate(r.eta);
+      if (eta && eta >= now) {
+        results.push({ ...r, vessel_code: code });
+      }
+    });
+  });
+
+  results.sort((a, b) => new Date(a.eta) - new Date(b.eta));
+
+  body.appendChild(
+    h('div', {className: 'section-label'},
+      sq + ' → ' + pq + ' 스케줄 (' + results.length + '건)')
+  );
+
+  if (!results.length) {
+    body.appendChild(
+      h('div', {style:{
+        background:'var(--card)',borderRadius:'14px',
+        border:'1px solid var(--cardbr)',
+        padding:'22px',textAlign:'center',
+        fontSize:'13px',color:'var(--muted)'
+      }}, '해당 조건의 스케줄이 없습니다.')
+    );
+    return;
+  }
+
+  results.slice(0, 30).forEach(c => {
+    const eta = parseDate(c.eta);
+    const etd = parseDate(c.etd);
+    const ship = state.ships.find(s => s.code === c.vessel_code);
+    const tCode = c.terminal ? c.terminal.split(' ')[0] : '';
+
+    body.appendChild(
+      h('div', {style:{
+        background:'var(--card)',borderRadius:'14px',
+        border:'1px solid var(--cardbr)',
+        boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+        padding:'10px 14px',display:'flex',
+        alignItems:'center',
+        justifyContent:'space-between',gap:'10px',
+        marginBottom:'10px'
+      }}, [
+        h('div', {style:{minWidth:'0'}}, [
+          h('div', {style:{display:'flex',
+            alignItems:'baseline',gap:'7px',
+            flexWrap:'wrap'}}, [
+            h('span', {style:{fontFamily:'Inter',
+              fontWeight:'800',fontSize:'15px',
+              color:'var(--ink)'}}, c.vessel_code),
+            h('span', {style:{fontSize:'11px',
+              color:'var(--ink3)'}},
+              portShort(c.port_name)),
+            tCode ? h('span', {style:{
+              fontSize:'10px',fontFamily:'Inter',
+              fontWeight:'700',color:'#0064B4',
+              background:'#e8f1fb',
+              padding:'1px 6px',borderRadius:'6px'
+            }}, tCode) : null
+          ]),
+          h('div', {style:{marginTop:'2px',
+            fontSize:'11px',color:'var(--ink3)'}},
+            '항차 ' + (c.voyage_no || '-')
+            + (ship ? ' · ' + (ship.name || '') : ''))
+        ]),
+        h('div', {style:{flex:'0 0 auto',
+          textAlign:'right',fontFamily:'Inter'}}, [
+          h('div', {style:{fontSize:'11.5px',
+            color:'#2e7d32',fontWeight:'700'}},
+            'ETA ' + (eta ? fmtShort(eta) : '-')),
+          h('div', {style:{fontSize:'11.5px',
+            color:'#c25d00',fontWeight:'700',
+            marginTop:'1px'}},
+            'ETD ' + (etd ? fmtShort(etd) : '-'))
+        ])
+      ])
+    );
+  });
+
+  if (results.length > 30) {
+    body.appendChild(
+      h('div', {style:{
+        textAlign:'center',fontSize:'12px',
+        color:'var(--muted)',padding:'10px'
+      }}, '외 ' + (results.length - 30) + '건 더...')
+    );
+  }
 }
 
 function renderPortList(body) {
