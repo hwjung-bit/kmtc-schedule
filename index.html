@@ -617,7 +617,7 @@ const state = {
   favorites: { ship: [], port: [] },
 
   // UI
-  activeTab: 'schedule',
+  activeTab: 'overview',
   loading: false,
   expanded: null,
   voyTab: {},       // code -> 'cur'|'next'
@@ -1102,8 +1102,8 @@ function render() {
     if (tc2 && scrollY > 0) tc2.scrollTop = scrollY;
 
     // Schedule body needs to be populated AFTER DOM is ready
-    if (state.loggedIn && state.activeTab === 'schedule') {
-      renderScheduleBody();
+    if (state.loggedIn && state.activeTab === 'overview') {
+      renderOverviewBody();
     }
 
     // Restore focus
@@ -1490,9 +1490,9 @@ function renderApp(app) {
   });
 
   switch (state.activeTab) {
-    case 'schedule': renderScheduleTab(content); break;
+    case 'overview': renderOverviewTab(content); break;
+    case 'schedule': renderPortTab(content); break;
     case 'dock': renderDockTab(content); break;
-    case 'port': renderPortTab(content); break;
     case 'settings': renderSettingsTab(content); break;
   }
   main.appendChild(content);
@@ -1500,9 +1500,9 @@ function renderApp(app) {
   // Bottom tab bar
   const bar = h('div', {className: 'tab-bar'});
   const tabs = [
-    { id:'schedule', icon:'\u{1F6A2}', label:'스케줄' },
+    { id:'overview', icon:'\u{1F6A2}', label:'최근' },
+    { id:'schedule', icon:'\u{1F50D}', label:'스케줄' },
     { id:'dock', icon:'\u{1F527}', label:'입거' },
-    { id:'port', icon:'\u{1F50D}', label:'항구' },
     { id:'settings', icon:'\u2699\uFE0F', label:'설정' }
   ];
   tabs.forEach(t => {
@@ -1532,6 +1532,161 @@ function renderApp(app) {
 /* ==================================================
    SCHEDULE TAB
 ================================================== */
+/* ==================================================
+   OVERVIEW TAB — Quick vessel status list
+================================================== */
+function renderOverviewTab(container) {
+  const header = h('div', {className: 'tab-header'});
+  header.appendChild(
+    h('div', {style:{
+      display:'flex',alignItems:'baseline',gap:'7px'
+    }}, [
+      h('span', {style:{
+        fontFamily:'Inter',fontWeight:'800',
+        fontSize:'20px',letterSpacing:'0.5px',
+        lineHeight:'1'
+      }}, 'KMTC'),
+      h('span', {style:{
+        fontFamily:'Inter',fontSize:'20px',
+        fontWeight:'600',letterSpacing:'1px',
+        lineHeight:'1',color:'#a9c8ee'
+      }}, 'FLEET')
+    ])
+  );
+
+  const favCount = state.favorites.ship.length;
+  const total = state.ships.length;
+  header.appendChild(
+    h('div', {style:{
+      marginTop:'4px',fontSize:'11.5px',
+      color:'#a9c8ee',display:'flex',
+      alignItems:'center',gap:'6px'
+    }}, [
+      h('span', {style:{
+        width:'6px',height:'6px',borderRadius:'50%',
+        background:'#35d07f',display:'inline-block'
+      }}),
+      fmtShort(parseDate(state.lastUpdate))
+        + ' 업데이트 · ' + total + '척'
+    ])
+  );
+  container.appendChild(header);
+
+  const body = h('div', {
+    id: 'overview-body',
+    style: { padding: '10px 16px 20px' }
+  });
+  container.appendChild(body);
+}
+
+function renderOverviewBody() {
+  const body = document.getElementById('overview-body');
+  if (!body) return;
+  body.innerHTML = '';
+
+  if (!state.ships.length) {
+    body.appendChild(
+      h('div', {style:{padding:'40px',textAlign:'center',
+        color:'var(--muted)',fontSize:'13px'}},
+        '선박 목록 로딩 중...')
+    );
+    return;
+  }
+
+  // All ships sorted: favorites first, then by group
+  const favSet = new Set(state.favorites.ship);
+  const allShips = [...state.ships].sort((a, b) => {
+    const af = favSet.has(a.code) ? 0 : 1;
+    const bf = favSet.has(b.code) ? 0 : 1;
+    if (af !== bf) return af - bf;
+    return 0;
+  });
+
+  allShips.forEach(ship => {
+    const code = ship.code;
+    const pos = getShipPosition(state.schedules[code] || [], code);
+    const color = groupColor(ship);
+    const isFav = favSet.has(code);
+
+    const row = h('div', {style:{
+      display:'flex',alignItems:'center',gap:'10px',
+      padding:'10px 12px',marginBottom:'6px',
+      background:'var(--card)',borderRadius:'12px',
+      border:'1px solid var(--cardbr)',
+      boxShadow:'0 1px 4px rgba(20,40,80,.04)',
+      cursor:'pointer'
+    }, onClick: () => {
+      state.activeTab = 'schedule';
+      state.portShipQuery = code;
+      state.portQuery = '';
+      render();
+    }});
+
+    // Color dot
+    row.appendChild(
+      h('div', {style:{
+        width:'8px',height:'8px',borderRadius:'50%',
+        background: color,flex:'0 0 auto'
+      }})
+    );
+
+    // Code
+    row.appendChild(
+      h('span', {style:{
+        fontFamily:'Inter',fontWeight:'800',
+        fontSize:'14px',color:'var(--ink)',
+        width:'40px',flex:'0 0 auto'
+      }}, code)
+    );
+
+    // Status badge
+    row.appendChild(
+      h('span', {style:{
+        fontSize:'10px',fontWeight:'700',
+        color: pos.status.color,
+        background: pos.status.bg,
+        padding:'2px 6px',borderRadius:'10px',
+        flex:'0 0 auto'
+      }}, pos.status.label)
+    );
+
+    // Route
+    const routeText = pos.from && pos.to
+      ? pos.from + '→' + pos.to
+      : pos.from || pos.to || '-';
+    row.appendChild(
+      h('span', {style:{
+        flex:'1',fontSize:'12px',fontWeight:'600',
+        color:'var(--ink2)',overflow:'hidden',
+        textOverflow:'ellipsis',whiteSpace:'nowrap',
+        fontFamily:'Inter'
+      }}, routeText)
+    );
+
+    // ETA
+    if (pos.eta) {
+      row.appendChild(
+        h('span', {style:{
+          flex:'0 0 auto',fontSize:'11px',
+          color:'var(--ink3)',fontFamily:'Inter'
+        }}, fmtDateOnly(pos.eta))
+      );
+    }
+
+    // Star
+    if (isFav) {
+      row.appendChild(
+        h('span', {style:{
+          color:'#f6a623',fontSize:'13px',
+          flex:'0 0 auto'
+        }}, '★')
+      );
+    }
+
+    body.appendChild(row);
+  });
+}
+
 function renderScheduleTab(container) {
   const header = h('div', {className: 'tab-header'});
 
