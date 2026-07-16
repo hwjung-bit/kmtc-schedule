@@ -418,72 +418,125 @@ function fmtDateISO(d) {
     + String(d.getMonth()+1).padStart(2,'0') + '-'
     + String(d.getDate()).padStart(2,'0');
 }
-// Port code → consolidated name mapping
+// Port code → display name (based on actual API port codes)
 const PORT_CONSOLIDATE = {
-  // Busan terminals & codes
-  'PUS':'BUSAN','PNC':'BUSAN','HBGT':'BUSAN',
-  'HBCT':'BUSAN','DGT':'BUSAN','BPT':'BUSAN',
-  'BPTS':'BUSAN','BNCT':'BUSAN','HJNC':'BUSAN',
-  'HPNT':'BUSAN','UNCT':'BUSAN','BUS':'BUSAN',
+  // Korea
+  'PUS':'BUSAN','PNC':'BUSAN','HBGT':'BUSAN','HBCT':'BUSAN',
+  'DGT':'BUSAN','BPT':'BUSAN','BPTS':'BUSAN','BNCT':'BUSAN',
+  'HJNC':'BUSAN','HPNT':'BUSAN','UNCT':'BUSAN',
   'PUSAN':'BUSAN','PUSAN NEW CONTAINER TMNL':'BUSAN',
-  // Ulsan
-  'USN':'ULSAN','JUCT':'ULSAN','ULS':'ULSAN',
-  // Gwangyang
-  'KAN':'GWANGYANG','KIT':'GWANGYANG','GWY':'GWANGYANG',
-  // Incheon
-  'INC':'INCHEON','ICT':'INCHEON','ICN':'INCHEON',
-  // Geoje
-  'GJE':'GEOJE',
+  'USN':'ULSAN',
+  'KAN':'GWANGYANG','KWANGYANG':'GWANGYANG',
+  'INC':'INCHEON','INCHON':'INCHEON',
+  'PTK':'PYEONGTAEK',
+  'KPO':'POHANG',
+  'DSN':'DAESAN',
   // China
-  'SHA':'SHANGHAI','SHG':'SHANGHAI',
-  'NBO':'NINGBO','NGB':'NINGBO',
-  'TAO':'QINGDAO','QDO':'QINGDAO',
-  'TXG':'TIANJIN','TSN':'TIANJIN','TJN':'TIANJIN',
-  'SZX':'SHENZHEN','SHK':'SHENZHEN','DCB':'SHENZHEN',
+  'SHA':'SHANGHAI',
+  'NBO':'NINGBO',
+  'TAO':'QINGDAO',
+  'XGG':'XINGANG',
+  'SHK':'SHEKOU',
+  'DCB':'DA CHAN BAY',
+  'NNS':'NANSHA',
+  'XMN':'XIAMEN',
+  'LYG':'LIANYUNGANG',
+  'FQG':'FUQING',
+  'WEI':'WEIHAI',
+  'SWA':'SHANTOU',
+  'ZOS':'ZHOUSHAN',
+  // Hong Kong / Taiwan
+  'HKG':'HONG KONG',
+  'KEL':'KEELUNG',
+  'KHH':'KAOHSIUNG',
+  'TXG':'TAICHUNG',
   // Japan
-  'HKT':'HAKATA','OSA':'OSAKA',
+  'HKT':'HAKATA','OSA':'OSAKA','NGO':'NAGOYA',
+  'TYO':'TOKYO','YOK':'YOKOHAMA','UKB':'KOBE',
+  'SMZ':'SHIMIZU','KWS':'KAWASAKI','YKK':'YOKKAICHI',
+  'THS':'TOYOHASHI','KIJ':'NIIGATA','MYJ':'MATSUYAMA',
+  'IMB':'IMABARI','IYM':'IYOMISHIMA','TKS':'TOKUSHIMA',
+  'TAK':'TAKAMATSU','MIZ':'MIZUSHIMA','HIJ':'HIROSHIMA',
+  'FKY':'FUKUYAMA','OIT':'OITA','SDJ':'SENDAI',
+  'TMK':'TOMAKOMAI','KUH':'KUSHIRO','MUR':'MURORAN',
+  'ISI':'ISHIKARI','HHE':'HACHINOHE','AXT':'AKITA',
+  'HTA':'HITACHINAKA','ONA':'ONAHAMA',
+  'MAI':'MAIZURU','SMN':'SAKAIMINATO','KNZ':'KANAZAWA',
+  'TRG':'TSURUGA','SKT':'SAKATA','TOS':'TOYAMA',
+  'IMI':'IMARI','KIS':'KAMAISHI','CHB':'CHIBA',
+  'IWK':'IWAKUNI','TKY':'TOKUYAMA',
   // SE Asia
-  'SIN':'SINGAPORE','SGN':'HOCHIMINH','HCM':'HOCHIMINH',
-  'HPH':'HAIPHONG','MNL':'MANILA',
-  'LCH':'LAEMCHABANG','LCB':'LAEMCHABANG',
+  'SIN':'SINGAPORE',
+  'SGN':'HOCHIMINH',
+  'HPH':'HAIPHONG',
+  'CMP':'CAI MEP',
+  'LCH':'LAEMCHABANG',
   'BKK':'BANGKOK',
   'PKG':'PORT KLANG','PKW':'PORT KLANG',
+  'PEN':'PENANG',
+  'PGU':'PASIR GUDANG',
   'JKT':'JAKARTA',
+  'SUB':'SURABAYA',
+  'MNL':'MANILA','MIP':'MANILA',
   // India / Middle East
-  'MAA':'CHENNAI','NSA':'NHAVA SHEVA',
-  'MUN':'MUNDRA','CMB':'COLOMBO',
-  'JEA':'JEBEL ALI','JBL':'JEBEL ALI',
-  // Hong Kong
-  'HKG':'HONG KONG','HIT':'HONG KONG',
-  // Long Beach / US
+  'MAA':'CHENNAI','MADRAS':'CHENNAI',
+  'NSA':'NHAVA SHEVA',
+  'MUN':'MUNDRA',
+  'CMB':'COLOMBO',
+  'KTP':'KATUPALLI',
+  'HZR':'HAZIRA',
+  'VTZ':'VISHAKHAPATNAM',
+  'KHI':'KARACHI',
+  'JEA':'JEBEL ALI',
+  'DMM':'DAMMAM',
+  'SOH':'SOHAR',
+  'KLF':'KHOR AL FAKKAN',
+  'KSP':'KHALIFA PORT',
+  'HMA':'HAMAD',
+  // Africa
+  'MBA':'MOMBASA',
+  'DAR':'DAR ES SALAAM',
+  // Americas
   'LGB':'LONG BEACH',
+  'ZLO':'MANZANILLO',
 };
-// Search aliases: what user might type → port name
+
+// Search aliases: common abbreviations + Korean → canonical name
 const SEARCH_ALIAS = {
-  'BUS':'BUSAN','PUS':'BUSAN','부산':'BUSAN',
+  // Korean
+  'BUS':'BUSAN','부산':'BUSAN',
   'ULS':'ULSAN','울산':'ULSAN',
   'GWY':'GWANGYANG','광양':'GWANGYANG',
   'ICN':'INCHEON','인천':'INCHEON',
-  'SHA':'SHANGHAI','상하이':'SHANGHAI',
-  'NGB':'NINGBO','닝보':'NINGBO',
-  'QDO':'QINGDAO','TAO':'QINGDAO','칭다오':'QINGDAO',
-  'TJN':'TIANJIN','톈진':'TIANJIN',
-  'SZX':'SHENZHEN','션전':'SHENZHEN',
-  'SIN':'SINGAPORE','싱가포르':'SINGAPORE',
-  'SGN':'HOCHIMINH','HCM':'HOCHIMINH','호치민':'HOCHIMINH',
-  'HKG':'HONG KONG','홍콩':'HONG KONG',
-  'LCH':'LAEMCHABANG','LCB':'LAEMCHABANG','람차방':'LAEMCHABANG',
-  'BKK':'BANGKOK','방콕':'BANGKOK',
-  'MNL':'MANILA','마닐라':'MANILA',
-  'JKT':'JAKARTA','자카르타':'JAKARTA',
-  'MAA':'CHENNAI','첸나이':'CHENNAI',
-  'NSA':'NHAVA SHEVA','나바셰바':'NHAVA SHEVA',
-  'MUN':'MUNDRA','문드라':'MUNDRA',
-  'CMB':'COLOMBO','콜롬보':'COLOMBO',
-  'JEA':'JEBEL ALI','JBL':'JEBEL ALI','제벨알리':'JEBEL ALI',
-  'HKT':'HAKATA','하카타':'HAKATA',
-  'OSA':'OSAKA','오사카':'OSAKA',
-  'LGB':'LONG BEACH',
+  '평택':'PYEONGTAEK','포항':'POHANG',
+  // China
+  '상하이':'SHANGHAI','닝보':'NINGBO',
+  '칭다오':'QINGDAO','QDO':'QINGDAO',
+  '션전':'SHEKOU','SZX':'SHEKOU',
+  '톈진':'XINGANG','TJN':'XINGANG',
+  '난사':'NANSHA','샤먼':'XIAMEN',
+  '저우산':'ZHOUSHAN',
+  // HK/TW
+  '홍콩':'HONG KONG','기륭':'KEELUNG','가오슝':'KAOHSIUNG',
+  // Japan
+  '하카타':'HAKATA','오사카':'OSAKA','나고야':'NAGOYA',
+  '도쿄':'TOKYO','요코하마':'YOKOHAMA','고베':'KOBE',
+  // SE Asia
+  '싱가포르':'SINGAPORE',
+  '호치민':'HOCHIMINH','HCM':'HOCHIMINH',
+  '하이퐁':'HAIPHONG',
+  '람차방':'LAEMCHABANG','LCB':'LAEMCHABANG',
+  '방콕':'BANGKOK',
+  '포트클랑':'PORT KLANG',
+  '자카르타':'JAKARTA',
+  '마닐라':'MANILA',
+  // India/ME
+  '첸나이':'CHENNAI',
+  '나바셰바':'NHAVA SHEVA','뭄바이':'NHAVA SHEVA',
+  '문드라':'MUNDRA',
+  '콜롬보':'COLOMBO',
+  '제벨알리':'JEBEL ALI','JBL':'JEBEL ALI',
+  '담맘':'DAMMAM','카라치':'KARACHI',
 };
 
 function portShort(name) {
