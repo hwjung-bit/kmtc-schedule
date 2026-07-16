@@ -420,19 +420,70 @@ function fmtDateISO(d) {
 }
 // Port code → consolidated name mapping
 const PORT_CONSOLIDATE = {
-  // Busan terminals
+  // Busan terminals & codes
   'PUS':'BUSAN','PNC':'BUSAN','HBGT':'BUSAN',
   'HBCT':'BUSAN','DGT':'BUSAN','BPT':'BUSAN',
   'BPTS':'BUSAN','BNCT':'BUSAN','HJNC':'BUSAN',
-  'HPNT':'BUSAN','UNCT':'BUSAN',
-  // Port name patterns
+  'HPNT':'BUSAN','UNCT':'BUSAN','BUS':'BUSAN',
   'PUSAN':'BUSAN','PUSAN NEW CONTAINER TMNL':'BUSAN',
   // Ulsan
-  'USN':'ULSAN','JUCT':'ULSAN',
+  'USN':'ULSAN','JUCT':'ULSAN','ULS':'ULSAN',
   // Gwangyang
-  'KAN':'GWANGYANG','KIT':'GWANGYANG',
+  'KAN':'GWANGYANG','KIT':'GWANGYANG','GWY':'GWANGYANG',
   // Incheon
-  'INC':'INCHEON','ICT':'INCHEON',
+  'INC':'INCHEON','ICT':'INCHEON','ICN':'INCHEON',
+  // Geoje
+  'GJE':'GEOJE',
+  // China
+  'SHA':'SHANGHAI','SHG':'SHANGHAI',
+  'NBO':'NINGBO','NGB':'NINGBO',
+  'TAO':'QINGDAO','QDO':'QINGDAO',
+  'TXG':'TIANJIN','TSN':'TIANJIN','TJN':'TIANJIN',
+  'SZX':'SHENZHEN','SHK':'SHENZHEN','DCB':'SHENZHEN',
+  // Japan
+  'HKT':'HAKATA','OSA':'OSAKA',
+  // SE Asia
+  'SIN':'SINGAPORE','SGN':'HOCHIMINH','HCM':'HOCHIMINH',
+  'HPH':'HAIPHONG','MNL':'MANILA',
+  'LCH':'LAEMCHABANG','LCB':'LAEMCHABANG',
+  'BKK':'BANGKOK',
+  'PKG':'PORT KLANG','PKW':'PORT KLANG',
+  'JKT':'JAKARTA',
+  // India / Middle East
+  'MAA':'CHENNAI','NSA':'NHAVA SHEVA',
+  'MUN':'MUNDRA','CMB':'COLOMBO',
+  'JEA':'JEBEL ALI','JBL':'JEBEL ALI',
+  // Hong Kong
+  'HKG':'HONG KONG','HIT':'HONG KONG',
+  // Long Beach / US
+  'LGB':'LONG BEACH',
+};
+// Search aliases: what user might type → port name
+const SEARCH_ALIAS = {
+  'BUS':'BUSAN','PUS':'BUSAN','부산':'BUSAN',
+  'ULS':'ULSAN','울산':'ULSAN',
+  'GWY':'GWANGYANG','광양':'GWANGYANG',
+  'ICN':'INCHEON','인천':'INCHEON',
+  'SHA':'SHANGHAI','상하이':'SHANGHAI',
+  'NGB':'NINGBO','닝보':'NINGBO',
+  'QDO':'QINGDAO','TAO':'QINGDAO','칭다오':'QINGDAO',
+  'TJN':'TIANJIN','톈진':'TIANJIN',
+  'SZX':'SHENZHEN','션전':'SHENZHEN',
+  'SIN':'SINGAPORE','싱가포르':'SINGAPORE',
+  'SGN':'HOCHIMINH','HCM':'HOCHIMINH','호치민':'HOCHIMINH',
+  'HKG':'HONG KONG','홍콩':'HONG KONG',
+  'LCH':'LAEMCHABANG','LCB':'LAEMCHABANG','람차방':'LAEMCHABANG',
+  'BKK':'BANGKOK','방콕':'BANGKOK',
+  'MNL':'MANILA','마닐라':'MANILA',
+  'JKT':'JAKARTA','자카르타':'JAKARTA',
+  'MAA':'CHENNAI','첸나이':'CHENNAI',
+  'NSA':'NHAVA SHEVA','나바셰바':'NHAVA SHEVA',
+  'MUN':'MUNDRA','문드라':'MUNDRA',
+  'CMB':'COLOMBO','콜롬보':'COLOMBO',
+  'JEA':'JEBEL ALI','JBL':'JEBEL ALI','제벨알리':'JEBEL ALI',
+  'HKT':'HAKATA','하카타':'HAKATA',
+  'OSA':'OSAKA','오사카':'OSAKA',
+  'LGB':'LONG BEACH',
 };
 
 function portShort(name) {
@@ -2701,9 +2752,13 @@ function renderPortTab(container) {
 }
 
 function renderCombinedSearch(body) {
-  const pq = (state.portQuery || '').trim().toUpperCase();
+  let pq = (state.portQuery || '').trim().toUpperCase();
   const sq = (state.portShipQuery || '').trim().toUpperCase();
   const rawPq = (state.portQuery || '').trim();
+
+  // Resolve alias: BUS→BUSAN, 부산→BUSAN etc.
+  const aliasResolved = SEARCH_ALIAS[pq] || SEARCH_ALIAS[rawPq];
+  if (aliasResolved) pq = aliasResolved.toUpperCase();
 
   // Find matching port calls from all schedules
   const now = new Date();
@@ -2722,8 +2777,11 @@ function renderCombinedSearch(body) {
       // Filter by port query
       const pn = portShort(r.port_name || '').toUpperCase();
       const pc = (r.port_code || '').toUpperCase();
+      // Also consolidate port_code
+      const pcResolved = (PORT_CONSOLIDATE[pc] || '').toUpperCase();
       const kr = PORT_KR[pn] || '';
       const portMatch = pn.includes(pq) || pc.includes(pq)
+        || pcResolved.includes(pq)
         || (rawPq && kr.includes(rawPq));
       if (!portMatch) return;
 
