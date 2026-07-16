@@ -965,7 +965,29 @@ function processSchedule(rows) {
  * Determine ship status & current position from ALL raw schedule data.
  * Looks across all voyages, not just "current" voyage.
  */
-function getShipPosition(rawRows) {
+function getShipPosition(rawRows, shipCode) {
+  // Check if ship is in dock (from docks table / spreadsheet)
+  if (shipCode && state.docks.length) {
+    const now = new Date();
+    const dock = state.docks.find(d => {
+      if (d.code !== shipCode) return false;
+      const s = new Date(d.start_date);
+      const e = new Date(d.end_date);
+      return s <= now && e >= now;
+    });
+    if (dock) {
+      return {
+        status: { label: '입거중', color: '#c25d00',
+          bg: '#fff3e0', icon: '🔧' },
+        from: dock.yard || '',
+        to: dock.port || '',
+        eta: new Date(dock.end_date),
+        voyage: '',
+        dock: dock
+      };
+    }
+  }
+
   if (!rawRows || !rawRows.length) {
     return {
       status: { label: '정보없음', color: '#97a2b5',
@@ -1827,7 +1849,7 @@ function renderShipCard(ship) {
   const rows = state.schedules[code];
   const schedule = processSchedule(rows);
   // Use raw rows for accurate position detection
-  const pos = getShipPosition(rows || []);
+  const pos = getShipPosition(rows || [], code);
   const status = pos.status;
   const portInfo = pos;
 
@@ -1870,14 +1892,28 @@ function renderShipCard(ship) {
     flex:'1',minWidth:'0',display:'flex',
     alignItems:'baseline',gap:'6px'
   }});
-  if (portInfo.from && portInfo.to) {
+  if (portInfo.dock) {
+    // In dock — show yard name + end date
+    routeDiv.appendChild(
+      h('span', {style:{
+        fontSize:'12px',fontWeight:'700',
+        color:'#c25d00'
+      }}, '🔧 ' + portInfo.from)
+    );
+    if (portInfo.eta) {
+      routeDiv.appendChild(
+        h('span', {className: 'ship-eta-short'},
+          '~' + fmtDateOnly(portInfo.eta))
+      );
+    }
+  } else if (portInfo.from && portInfo.to) {
     const routeSpan = h('span', {
       className: 'ship-route',
       title: portInfo.from + ' \u2192 ' + portInfo.to
     }, [
-      portInfo.from.slice(0, 3),
+      portInfo.from,
       h('span', {style:{color: color}}, '\u2192'),
-      portInfo.to.slice(0, 3)
+      portInfo.to
     ]);
     routeDiv.appendChild(routeSpan);
     if (portInfo.eta) {
