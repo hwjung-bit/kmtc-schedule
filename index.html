@@ -1692,33 +1692,103 @@ function renderScheduleBody() {
       return true;
     });
 
-    // TODO: date range filtering on schedule data
-    // For now, filter ships that have schedules in range
+    // Date range: show port call list (not ship cards)
     if (state.dateFrom || state.dateTo) {
       const fromT = state.dateFrom
         ? new Date(state.dateFrom + 'T00:00:00') : null;
       const toT = state.dateTo
         ? new Date(state.dateTo + 'T23:59:59') : null;
-      results = results.filter(ship => {
+
+      // Collect all matching port calls
+      const calls = [];
+      results.forEach(ship => {
         const rows = state.schedules[ship.code];
-        if (!rows) return false;
-        return rows.some(r => {
+        if (!rows) return;
+        rows.forEach(r => {
           const eta = parseDate(r.eta);
-          if (!eta) return false;
-          if (fromT && eta < fromT) return false;
-          if (toT && eta > toT) return false;
-          return true;
+          if (!eta) return;
+          if (fromT && eta < fromT) return;
+          if (toT && eta > toT) return;
+          calls.push({ ...r, vessel_code: ship.code, shipName: ship.name });
         });
       });
+      calls.sort((a, b) => new Date(a.eta) - new Date(b.eta));
+
+      body.appendChild(
+        h('div', {className: 'section-label'},
+          `${state.dateFrom||'…'} ~ ${state.dateTo||'…'} `
+          + (q ? q + ' ' : '') + '기항 스케줄 (' + calls.length + '건)')
+      );
+
+      if (!calls.length) {
+        body.appendChild(
+          h('div', {style:{
+            background:'var(--card)',borderRadius:'14px',
+            border:'1px solid var(--cardbr)',
+            padding:'22px',textAlign:'center',
+            fontSize:'13px',color:'var(--muted)'
+          }}, '해당 기간의 스케줄이 없습니다.')
+        );
+      } else {
+        calls.slice(0, 50).forEach(c => {
+          const eta = parseDate(c.eta);
+          const etd = parseDate(c.etd);
+          const tCode = c.terminal ? c.terminal.split(' ')[0] : '';
+          body.appendChild(
+            h('div', {style:{
+              background:'var(--card)',borderRadius:'14px',
+              border:'1px solid var(--cardbr)',
+              boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+              padding:'10px 14px',display:'flex',
+              alignItems:'center',justifyContent:'space-between',
+              gap:'10px',marginBottom:'8px'
+            }}, [
+              h('div', {style:{minWidth:'0'}}, [
+                h('div', {style:{display:'flex',
+                  alignItems:'baseline',gap:'7px'}}, [
+                  h('span', {style:{fontFamily:'Inter',
+                    fontWeight:'800',fontSize:'14px',
+                    color:'var(--ink)'}}, c.vessel_code),
+                  h('span', {style:{fontSize:'12px',
+                    color:'var(--ink2)',fontWeight:'600'}},
+                    portShort(c.port_name, c.port_code)),
+                  tCode ? h('span', {style:{
+                    fontSize:'9px',color:'#0064B4',
+                    background:'#e8f1fb',padding:'1px 5px',
+                    borderRadius:'5px',fontFamily:'Inter'
+                  }}, tCode) : null
+                ]),
+                h('div', {style:{marginTop:'2px',
+                  fontSize:'11px',color:'var(--ink3)'}},
+                  (c.voyage_no || '') + ' · ' + (c.shipName || ''))
+              ]),
+              h('div', {style:{flex:'0 0 auto',
+                textAlign:'right',fontFamily:'Inter'}}, [
+                h('div', {style:{fontSize:'11px',
+                  color:'#2e7d32',fontWeight:'700'}},
+                  'ETA ' + (eta ? fmtShort(eta) : '-')),
+                h('div', {style:{fontSize:'11px',
+                  color:'#c25d00',fontWeight:'700',marginTop:'1px'}},
+                  'ETD ' + (etd ? fmtShort(etd) : '-'))
+              ])
+            ])
+          );
+        });
+        if (calls.length > 50) {
+          body.appendChild(
+            h('div', {style:{textAlign:'center',fontSize:'12px',
+              color:'var(--muted)',padding:'10px'}},
+              '외 ' + (calls.length - 50) + '건 더...')
+          );
+        }
+      }
+      return;
     }
 
+    // No date filter — show ship cards
     body.appendChild(
       h('div', {className: 'section-label'},
-        `검색 결과 ${results.length}척`
-        + (state.dateFrom || state.dateTo
-          ? ` \xB7 ${state.dateFrom||'\u2026'}`
-            + ` ~ ${state.dateTo||'\u2026'}`
-          : ''))
+        `검색 결과 ${results.length}척`)
     );
 
     if (!results.length) {
