@@ -468,6 +468,24 @@ function portShort(nameOrRow, portCode) {
   if (!nameOrRow) return '';
   return nameOrRow.split(',')[0].trim();
 }
+// IME-safe input handler (Korean etc.)
+let _composing = false;
+document.addEventListener('compositionstart', () => _composing = true);
+document.addEventListener('compositionend', e => {
+  _composing = false;
+  // Trigger the pending update
+  if (e.target && e.target._onDone) e.target._onDone();
+});
+function onInputSafe(el, callback) {
+  el.addEventListener('input', e => {
+    if (_composing) {
+      el._onDone = () => callback(el.value);
+      return;
+    }
+    callback(el.value);
+  });
+}
+
 function numFmt(n) {
   return (n||0).toLocaleString();
 }
@@ -1576,8 +1594,8 @@ function renderScheduleTab(container) {
       '선명 또는 코드 검색 (예: KPS, PUSAN)',
     value: state.schedQuery
   });
-  searchInp.addEventListener('input', e => {
-    state.schedQuery = e.target.value;
+  onInputSafe(searchInp, val => {
+    state.schedQuery = val;
     renderScheduleBody();
   });
   searchBox.appendChild(searchInp);
@@ -2297,8 +2315,8 @@ function renderDockTab(container) {
     placeholder: '선명 또는 코드 검색',
     value: state.dockQuery
   });
-  inp.addEventListener('input', e => {
-    state.dockQuery = e.target.value;
+  onInputSafe(inp, val => {
+    state.dockQuery = val;
     render();
   });
   searchBox.appendChild(inp);
@@ -2713,8 +2731,8 @@ function renderPortTab(container) {
     value: state.portQuery,
     style: { fontSize: '13px' }
   });
-  portInp.addEventListener('input', e => {
-    state.portQuery = e.target.value;
+  onInputSafe(portInp, val => {
+    state.portQuery = val;
     state.selectedPort = null;
     render();
   });
@@ -2739,8 +2757,8 @@ function renderPortTab(container) {
     value: state.portShipQuery,
     style: { fontSize: '13px' }
   });
-  shipInp.addEventListener('input', e => {
-    state.portShipQuery = e.target.value;
+  onInputSafe(shipInp, val => {
+    state.portShipQuery = val;
     render();
   });
   shipBox.appendChild(shipInp);
