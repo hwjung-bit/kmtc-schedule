@@ -978,42 +978,119 @@ function processSchedule(rows) {
   return { voyages, current, next };
 }
 
-function getShipStatus(schedule) {
-  if (!schedule || !schedule.current) {
-    return { label: '정보없음', color: '#97a2b5',
-      bg: '#eef1f6', icon: '—' };
+/**
+ * Determine ship status & current position from ALL raw schedule data.
+ * Looks across all voyages, not just "current" voyage.
+ */
+function getShipPosition(rawRows) {
+  if (!rawRows || !rawRows.length) {
+    return {
+      status: { label: '정보없음', color: '#97a2b5',
+        bg: '#eef1f6', icon: '—' },
+      from: '', to: '', eta: null, voyage: ''
+    };
   }
-  const now = new Date();
-  const calls = schedule.current.calls;
-  // Find last arrived port
-  for (let i = calls.length - 1; i >= 0; i--) {
-    const c = calls[i];
-    if (c.arrival_status === 'A' &&
-        c.departure_status !== 'A') {
-      return { label: '접안중', color: '#0064B4',
-        bg: '#e8f1fb', icon: '⚓' };
+
+  // Sort all calls by ETA chronologically
+  const sorted = [...rawRows]
+    .filter(r => r.eta)
+    .sort((a, b) => new Date(a.eta) - new Date(b.eta));
+
+  if (!sorted.length) {
+    return {
+      status: { label: '정보없음', color: '#97a2b5',
+        bg: '#eef1f6', icon: '—' },
+      from: '', to: '', eta: null, voyage: ''
+    };
+  }
+
+  // Find: last port where ship departed (departure_status='A')
+  let lastDeparted = null;
+  let lastDepartedIdx = -1;
+  // Find: port where ship is berthed (arrival='A', departure!='A')
+  let berthedAt = null;
+
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const c = sorted[i];
+    if (!berthedAt && c.arrival_status === 'A'
+        && c.departure_status !== 'A') {
+      berthedAt = c;
+    }
+    if (!lastDeparted && c.departure_status === 'A') {
+      lastDeparted = c;
+      lastDepartedIdx = i;
+      break; // found the latest confirmed departure
     }
   }
-  return { label: '운항중', color: '#1b7a3d',
-    bg: '#e6f4ea', icon: '▶' };
-}
 
-function getCurrentPort(schedule) {
-  if (!schedule || !schedule.current) {
-    return { from: '', to: '', eta: null };
+  // If berthed somewhere
+  if (berthedAt) {
+    const bEta = parseDate(berthedAt.eta);
+    // Berthed: find next port after this
+    const bIdx = sorted.indexOf(berthedAt);
+    const nextPort = sorted[bIdx + 1];
+    return {
+      status: { label: '접안중', color: '#0064B4',
+        bg: '#e8f1fb', icon: '⚓' },
+      from: portShort(berthedAt.port_name),
+      to: nextPort ? portShort(nextPort.port_name) : '',
+      eta: bEta,
+      voyage: berthedAt.voyage_no || ''
+    };
   }
+
+  // If sailing: last departed → next port
+  if (lastDeparted && lastDepartedIdx >= 0) {
+    const nextCall = sorted[lastDepartedIdx + 1];
+    if (nextCall) {
+      return {
+        status: { label: '운항중', color: '#1b7a3d',
+          bg: '#e6f4ea', icon: '▶' },
+        from: portShort(lastDeparted.port_name),
+        to: portShort(nextCall.port_name),
+        eta: parseDate(nextCall.eta),
+        voyage: nextCall.voyage_no || ''
+      };
+    }
+  }
+
+  // Fallback: find first future port
   const now = new Date();
-  const calls = schedule.current.calls;
-  let idx = calls.findIndex(
+  const nextFuture = sorted.find(
     c => parseDate(c.eta) > now
   );
-  if (idx < 0) idx = calls.length - 1;
-  const from = idx > 0
-    ? portShort(calls[idx - 1].port_name)
-    : portShort(calls[0].port_name);
-  const to = portShort(calls[idx].port_name);
-  return { from, to, eta: parseDate(calls[idx].eta),
-    idx, calls };
+  if (nextFuture) {
+    const nIdx = sorted.indexOf(nextFuture);
+    const prevPort = nIdx > 0 ? sorted[nIdx - 1] : null;
+    return {
+      status: { label: '운항중', color: '#1b7a3d',
+        bg: '#e6f4ea', icon: '▶' },
+      from: prevPort ? portShort(prevPort.port_name) : '',
+      to: portShort(nextFuture.port_name),
+      eta: parseDate(nextFuture.eta),
+      voyage: nextFuture.voyage_no || ''
+    };
+  }
+
+  // All in past
+  const last = sorted[sorted.length - 1];
+  return {
+    status: { label: '정보없음', color: '#97a2b5',
+      bg: '#eef1f6', icon: '—' },
+    from: portShort(last.port_name),
+    to: '',
+    eta: null,
+    voyage: last.voyage_no || ''
+  };
+}
+
+// Backward compat wrappers
+function getShipStatus(schedule) {
+  // Not used directly anymore, but kept for safety
+  return getShipPosition([]).status;
+}
+function getCurrentPort(schedule) {
+  return { from: '', to: '', eta: null };
 }
 
 /* ==================================================
@@ -1756,8 +1833,10 @@ function renderShipCard(ship) {
   const isFav = state.favorites.ship.includes(code);
   const rows = state.schedules[code];
   const schedule = processSchedule(rows);
-  const status = getShipStatus(schedule);
-  const portInfo = getCurrentPort(schedule);
+  // Use raw rows for accurate position detection
+  const pos = getShipPosition(rows || []);
+  const status = pos.status;
+  const portInfo = pos;
 
   const card = h('div', {className: 'ship-card'});
 
