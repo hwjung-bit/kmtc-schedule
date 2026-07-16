@@ -469,20 +469,14 @@ function portShort(nameOrRow, portCode) {
   return nameOrRow.split(',')[0].trim();
 }
 // IME-safe input handler (Korean etc.)
-let _composing = false;
-document.addEventListener('compositionstart', () => _composing = true);
-document.addEventListener('compositionend', e => {
-  _composing = false;
-  // Trigger the pending update
-  if (e.target && e.target._onDone) e.target._onDone();
-});
+// Debounce render to avoid breaking IME composition
 function onInputSafe(el, callback) {
-  el.addEventListener('input', e => {
-    if (_composing) {
-      el._onDone = () => callback(el.value);
-      return;
-    }
-    callback(el.value);
+  let timer = null;
+  el.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      callback(el.value);
+    }, 300); // 300ms debounce — enough for IME
   });
 }
 
