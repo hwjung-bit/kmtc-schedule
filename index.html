@@ -418,9 +418,35 @@ function fmtDateISO(d) {
     + String(d.getMonth()+1).padStart(2,'0') + '-'
     + String(d.getDate()).padStart(2,'0');
 }
+// Port code → consolidated name mapping
+const PORT_CONSOLIDATE = {
+  // Busan terminals
+  'PUS':'BUSAN','PNC':'BUSAN','HBGT':'BUSAN',
+  'HBCT':'BUSAN','DGT':'BUSAN','BPT':'BUSAN',
+  'BPTS':'BUSAN','BNCT':'BUSAN','HJNC':'BUSAN',
+  'HPNT':'BUSAN','UNCT':'BUSAN',
+  // Port name patterns
+  'PUSAN':'BUSAN','PUSAN NEW CONTAINER TMNL':'BUSAN',
+  // Ulsan
+  'USN':'ULSAN','JUCT':'ULSAN',
+  // Gwangyang
+  'KAN':'GWANGYANG','KIT':'GWANGYANG',
+  // Incheon
+  'INC':'INCHEON','ICT':'INCHEON',
+};
+
 function portShort(name) {
   if (!name) return '';
-  return name.split(',')[0].trim();
+  const raw = name.split(',')[0].trim();
+  const up = raw.toUpperCase();
+  // Check consolidation map
+  if (PORT_CONSOLIDATE[up]) return PORT_CONSOLIDATE[up];
+  // Partial match for BUSAN variants
+  if (up.includes('PUSAN') || up.includes('BUSAN')) return 'BUSAN';
+  if (up.includes('KWANGYANG') || up.includes('GWANGYANG')) return 'GWANGYANG';
+  if (up.includes('ULSAN')) return 'ULSAN';
+  if (up.includes('INCHEON')) return 'INCHEON';
+  return raw;
 }
 function numFmt(n) {
   return (n||0).toLocaleString();
