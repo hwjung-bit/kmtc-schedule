@@ -721,9 +721,13 @@ async function loadScheduleFor(codes) {
   for (let i = 0; i < codes.length; i += 3) {
     const batch = codes.slice(i, i + 3);
     const promises = batch.map(async (code) => {
+      // Load past 6 months + all future data
+      const cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - 6);
       const { data, error } = await sb
         .from('schedules').select('*')
         .eq('vessel_code', code)
+        .gte('eta', cutoff.toISOString())
         .order('eta', { ascending: true })
         .limit(1000);
       if (error) {
