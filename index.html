@@ -4013,6 +4013,14 @@ function renderMyShipsSettings(body) {
 
 function renderAccountSettings(body) {
   const user = state.user || {};
+  const isSuper = isSuperAdmin(user.email);
+  const isAdmin = user.role === 'admin' || isSuper;
+  const roleLabel = isSuper ? '총관리자'
+    : user.role === 'admin' ? '관리자' : '사용자';
+  const roleColor = isSuper ? '#7b1fa2'
+    : user.role === 'admin' ? '#0064B4' : '#5b6a82';
+  const roleBg = isSuper ? '#f3e5f5'
+    : user.role === 'admin' ? '#e8f1fb' : '#eef1f6';
 
   // My account info
   body.appendChild(
