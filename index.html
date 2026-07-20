@@ -2953,7 +2953,7 @@ function renderPortTab(container) {
   header.appendChild(
     h('div', {style:{fontSize:'19px',fontWeight:'700',
       marginBottom:'12px'}},
-      '\u{1F50D} 항구 검색')
+      '\u{1F50D} 스케줄')
   );
 
   // Search — two fields: port + ship (side by side)
@@ -3081,6 +3081,8 @@ function renderCombinedSearch(body) {
 
   // Find matching port calls from all schedules
   const now = new Date();
+  const past14 = new Date(
+    now.getTime() - 14 * 24 * 3600 * 1000);
   const results = [];
 
   Object.entries(state.schedules).forEach(([code, rows]) => {
@@ -3107,9 +3109,9 @@ function renderCombinedSearch(body) {
         if (!portMatch) return;
       }
 
-      // Only future calls
+      // Past 2 weeks + future calls
       const eta = parseDate(r.eta);
-      if (eta && eta >= now) {
+      if (eta && eta >= past14) {
         results.push({ ...r, vessel_code: code });
       }
     });
@@ -3134,11 +3136,20 @@ function renderCombinedSearch(body) {
     return;
   }
 
-  results.slice(0, 30).forEach(c => {
+  results.slice(0, 50).forEach(c => {
     const eta = parseDate(c.eta);
     const etd = parseDate(c.etd);
     const ship = state.ships.find(s => s.code === c.vessel_code);
     const tCode = c.terminal ? c.terminal.split(' ')[0] : '';
+    const isPast = etd && etd < now;
+    const isBerthed = eta && eta <= now && etd && etd >= now;
+
+    // Status badge
+    const badge = isPast
+      ? { text: '완료', bg: '#eef1f6', color: '#97a2b5' }
+      : isBerthed
+        ? { text: '접안중', bg: '#e8f1fb', color: '#0064B4' }
+        : { text: '예정', bg: '#e6f4ea', color: '#1b7a3d' };
 
     body.appendChild(
       h('div', {style:{
@@ -3148,7 +3159,8 @@ function renderCombinedSearch(body) {
         padding:'10px 14px',display:'flex',
         alignItems:'center',
         justifyContent:'space-between',gap:'10px',
-        marginBottom:'10px'
+        marginBottom:'10px',
+        opacity: isPast ? '0.55' : '1'
       }}, [
         h('div', {style:{minWidth:'0'}}, [
           h('div', {style:{display:'flex',
@@ -3165,7 +3177,13 @@ function renderCombinedSearch(body) {
               fontWeight:'700',color:'#0064B4',
               background:'#e8f1fb',
               padding:'1px 6px',borderRadius:'6px'
-            }}, tCode) : null
+            }}, tCode) : null,
+            h('span', {style:{
+              fontSize:'9px',fontWeight:'700',
+              color: badge.color,
+              background: badge.bg,
+              padding:'1px 6px',borderRadius:'6px'
+            }}, badge.text)
           ]),
           h('div', {style:{marginTop:'2px',
             fontSize:'11px',color:'var(--ink3)'}},
@@ -3175,10 +3193,12 @@ function renderCombinedSearch(body) {
         h('div', {style:{flex:'0 0 auto',
           textAlign:'right',fontFamily:'Inter'}}, [
           h('div', {style:{fontSize:'11.5px',
-            color:'#2e7d32',fontWeight:'700'}},
+            color: isPast ? '#97a2b5' : '#2e7d32',
+            fontWeight:'700'}},
             'ETA ' + (eta ? fmtShort(eta) : '-')),
           h('div', {style:{fontSize:'11.5px',
-            color:'#c25d00',fontWeight:'700',
+            color: isPast ? '#97a2b5' : '#c25d00',
+            fontWeight:'700',
             marginTop:'1px'}},
             'ETD ' + (etd ? fmtShort(etd) : '-'))
         ])
@@ -3186,12 +3206,12 @@ function renderCombinedSearch(body) {
     );
   });
 
-  if (results.length > 30) {
+  if (results.length > 50) {
     body.appendChild(
       h('div', {style:{
         textAlign:'center',fontSize:'12px',
         color:'var(--muted)',padding:'10px'
-      }}, '외 ' + (results.length - 30) + '건 더...')
+      }}, '외 ' + (results.length - 50) + '건 더...')
     );
   }
 }
