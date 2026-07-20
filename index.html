@@ -346,6 +346,16 @@ const sb = window.supabase.createClient(
   SUPABASE_URL, SUPABASE_KEY
 );
 
+// Super admin list (hardcoded, no DB change needed)
+const SUPER_ADMINS = [
+  'rst@ekmtc.com',
+  'hwjung@ekmtc.com'
+];
+function isSuperAdmin(email) {
+  return SUPER_ADMINS.includes(
+    (email || '').toLowerCase());
+}
+
 /* ==================================================
    UTILITIES
 ================================================== */
@@ -3631,7 +3641,14 @@ function renderSettingsTab(container) {
 
   // Profile card
   const user = state.user || {};
-  const isAdmin = user.role === 'admin';
+  const isSuper = isSuperAdmin(user.email);
+  const isAdmin = user.role === 'admin' || isSuper;
+  const roleLabel = isSuper ? '총관리자'
+    : user.role === 'admin' ? '관리자' : '사용자';
+  const roleColor = isSuper ? '#7b1fa2'
+    : user.role === 'admin' ? '#0064B4' : '#5b6a82';
+  const roleBg = isSuper ? '#f3e5f5'
+    : user.role === 'admin' ? '#e8f1fb' : '#eef1f6';
   const initial = (user.name || 'U')[0].toUpperCase();
 
   const profile = h('div', {className:'settings-card'});
@@ -3646,10 +3663,10 @@ function renderSettingsTab(container) {
           ' ',
           h('span', {style:{
             fontSize:'11px',fontWeight:'700',
-            color: isAdmin ? '#0064B4' : '#5b6a82',
-            background: isAdmin ? '#e8f1fb' : '#eef1f6',
+            color: roleColor,
+            background: roleBg,
             padding:'2px 8px',borderRadius:'12px'
-          }}, isAdmin ? '관리자' : '사용자')
+          }}, roleLabel)
         ]),
         h('div', {style:{fontSize:'12px',
           color:'var(--ink3)',marginTop:'2px'}},
@@ -4021,7 +4038,6 @@ function renderAccountSettings(body) {
     ])
   );
   // Role
-  const isAdmin = user.role === 'admin';
   card.appendChild(
     h('div', {style:{display:'flex',
       alignItems:'center',justifyContent:'space-between',
@@ -4031,10 +4047,10 @@ function renderAccountSettings(body) {
         color:'var(--ink3)'}}, '권한'),
       h('span', {style:{
         fontSize:'11px',fontWeight:'700',
-        color: isAdmin ? '#0064B4' : '#5b6a82',
-        background: isAdmin ? '#e8f1fb' : '#eef1f6',
+        color: roleColor,
+        background: roleBg,
         padding:'2px 9px',borderRadius:'12px'
-      }}, isAdmin ? '관리자' : '사용자')
+      }}, roleLabel)
     ])
   );
   // Password change
@@ -4112,7 +4128,7 @@ function renderAccountSettings(body) {
   body.appendChild(card);
 
   // Admin: user management
-  if (user.role === 'admin') {
+  if (user.role === 'admin' || isSuperAdmin(user.email)) {
     renderAdminUsers(body);
   }
 }
@@ -4276,9 +4292,127 @@ async function renderAdminUsers(body) {
     }});
     const AV = ['#0064B4','#00897b','#6a3ab5',
       '#c25d00','#3949ab'];
+    const meSuper = isSuperAdmin(state.user.email);
     state.registeredUsers.forEach((u, i) => {
-      const isAdmin = u.role === 'admin';
+      const uIsSuper = isSuperAdmin(u.email);
+      const uIsAdmin = u.role === 'admin';
+      const uLabel = uIsSuper ? '총관리자'
+        : uIsAdmin ? '관리자' : '사용자';
+      const uColor = uIsSuper ? '#7b1fa2'
+        : uIsAdmin ? '#0064B4' : '#5b6a82';
+      const uBg = uIsSuper ? '#f3e5f5'
+        : uIsAdmin ? '#e8f1fb' : '#eef1f6';
       const isSelf = u.email === state.user.email;
+      const roleKey = 'roleOpen_' + u.email;
+
+      let actions = null;
+      if (!isSelf && !uIsSuper) {
+        const btns = [];
+        if (meSuper) {
+          // Super: role dropdown
+          btns.push(
+            h('span', {style:{
+              fontSize:'10.5px',fontWeight:'600',
+              color:'#0064B4',background:'#e8f1fb',
+              padding:'5px 8px',borderRadius:'8px',
+              cursor:'pointer'
+            }, onClick: () => {
+              state[roleKey] = !state[roleKey];
+              render();
+            }}, uLabel + ' \u25BE')
+          );
+          if (state[roleKey]) {
+            btns.push(
+              h('div', {style:{
+                position:'absolute',right:'60px',
+                top:'100%',marginTop:'4px',
+                background:'var(--card)',
+                border:'1px solid var(--cardbr)',
+                borderRadius:'10px',
+                boxShadow:
+                  '0 4px 16px rgba(0,0,0,.12)',
+                zIndex:'100',overflow:'hidden',
+                minWidth:'100px'
+              }}, [
+                {val:'user', label:'사용자'},
+                {val:'admin', label:'관리자'}
+              ].map(r =>
+                h('div', {style:{
+                  padding:'9px 14px',fontSize:'12px',
+                  fontWeight:'600',cursor:'pointer',
+                  color: u.role === r.val
+                    ? '#0064B4' : 'var(--ink)',
+                  background: u.role === r.val
+                    ? '#e8f1fb' : 'transparent',
+                  borderBottom:
+                    '1px solid var(--divider)'
+                }, onClick: async () => {
+                  if (u.role === r.val) {
+                    state[roleKey] = false;
+                    render(); return;
+                  }
+                  const ok = await showConfirm(
+                    u.name + ' \u2192 ' + r.label
+                    + '(으)로 변경?');
+                  if (!ok) {
+                    state[roleKey] = false;
+                    render(); return;
+                  }
+                  await sb.from('users').update({
+                    role: r.val
+                  }).eq('email', u.email);
+                  state[roleKey] = false;
+                  state.registeredUsers =
+                    await loadRegisteredUsers();
+                  render();
+                }}, r.label)
+              ))
+            );
+          }
+        } else {
+          btns.push(
+            h('span', {style:{
+              fontSize:'10.5px',fontWeight:'600',
+              color: uColor, background: uBg,
+              padding:'5px 8px',borderRadius:'8px'
+            }}, uLabel)
+          );
+        }
+        if (meSuper || (!uIsAdmin && !uIsSuper)) {
+          btns.push(
+            h('span', {style:{
+              fontSize:'10.5px',fontWeight:'600',
+              color:'#d14343',background:'#fdeaea',
+              padding:'5px 8px',borderRadius:'8px',
+              cursor:'pointer'
+            }, onClick: async () => {
+              const ok = await showConfirm(
+                u.name + ' 님의 접근 권한을 해제?');
+              if (!ok) return;
+              await sb.from('users').update({
+                status: 'rejected'
+              }).eq('email', u.email);
+              state.registeredUsers =
+                await loadRegisteredUsers();
+              render();
+            }}, '해제')
+          );
+        }
+        actions = h('div', {style:{
+          display:'flex',gap:'6px',flex:'0 0 auto',
+          position:'relative'
+        }}, btns);
+      } else if (isSelf) {
+        actions = h('span', {style:{fontSize:'10px',
+          color:'var(--muted)'}}, '본인 \u{1F512}');
+      } else {
+        actions = h('span', {style:{
+          fontSize:'10px',fontWeight:'700',
+          color:'#7b1fa2',background:'#f3e5f5',
+          padding:'3px 8px',borderRadius:'8px'
+        }}, '\u{1F451} 총관리자');
+      }
+
       list.appendChild(
         h('div', {style:{
           display:'flex',alignItems:'center',
@@ -4305,57 +4439,15 @@ async function renderAdminUsers(body) {
                 ' ',
                 h('span', {style:{
                   fontSize:'10px',fontWeight:'700',
-                  color: isAdmin ? '#0064B4' : '#5b6a82',
-                  background: isAdmin
-                    ? '#e8f1fb' : '#eef1f6',
+                  color: uColor, background: uBg,
                   padding:'2px 7px',borderRadius:'10px'
-                }}, isAdmin ? '관리자' : '사용자')
+                }}, uLabel)
               ]),
               h('div', {style:{fontSize:'11px',
                 color:'var(--muted)'}}, u.email)
             ])
           ]),
-          !isSelf ? h('div', {style:{
-            display:'flex',gap:'6px',flex:'0 0 auto'
-          }}, [
-            h('span', {style:{
-              fontSize:'10.5px',fontWeight:'600',
-              color:'#0064B4',background:'#e8f1fb',
-              padding:'5px 8px',borderRadius:'8px',
-              cursor:'pointer'
-            }, onClick: async () => {
-              const newRole = isAdmin ? 'user' : 'admin';
-              const msg = isAdmin
-                ? u.name + ' 님을 일반 사용자로 강등?'
-                : u.name + ' 님을 관리자로 승격?';
-              const ok = await showConfirm(msg);
-              if (!ok) return;
-              await sb.from('users').update({
-                role: newRole
-              }).eq('email', u.email);
-              state.registeredUsers =
-                await loadRegisteredUsers();
-              render();
-            }}, isAdmin ? '일반으로' : '관리자로'),
-            h('span', {style:{
-              fontSize:'10.5px',fontWeight:'600',
-              color:'#d14343',background:'#fdeaea',
-              padding:'5px 8px',borderRadius:'8px',
-              cursor:'pointer'
-            }, onClick: async () => {
-              const ok = await showConfirm(
-                u.name + ' 님의 접근 권한을 해제?'
-              );
-              if (!ok) return;
-              await sb.from('users').update({
-                status: 'rejected'
-              }).eq('email', u.email);
-              state.registeredUsers =
-                await loadRegisteredUsers();
-              render();
-            }}, '해제')
-          ]) : h('span', {style:{fontSize:'10px',
-            color:'var(--muted)'}}, '본인 \u{1F512}')
+          actions
         ])
       );
     });
@@ -4719,7 +4811,7 @@ async function initAppData() {
     render();
 
     // Admin data
-    if (state.user && state.user.role === 'admin') {
+    if (state.user && (state.user.role === 'admin' || isSuperAdmin(state.user.email))) {
       const [pending, registered] = await Promise.all([
         loadPendingUsers(),
         loadRegisteredUsers()
