@@ -1,0 +1,10 @@
+{
+  "name": "kmtc-schedule-sync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KMTC API -> Supabase schedule sync",
+  "main": "index.js",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

@@ -1,0 +1,48 @@
+name: KMTC Schedule Sync
+
+on:
+  schedule:
+    # Every 6 hours (KST 03:00, 09:00, 15:00, 21:00)
+    - cron: '0 0,6,12,18 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Sync mode'
+        required: true
+        default: 'incremental'
+        type: choice
+        options:
+          - incremental
+          - full
+          - single
+      vessel_code:
+        description: 'Vessel code (for single mode only)'
+        required: false
+        default: ''
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: sync
+        run: npm install
+
+      - name: Run sync
+        working-directory: sync
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          KMTC_API_URL: 'http://apigateway.ekmtc.com/gateway/vesselSchedule/v1/events'
+          KMTC_API_KEY: ${{ secrets.KMTC_API_KEY }}
+          SYNC_MODE: ${{ github.event.inputs.mode || 'incremental' }}
+          VESSEL_CODE: ${{ github.event.inputs.vessel_code || '' }}
+        run: node index.js
