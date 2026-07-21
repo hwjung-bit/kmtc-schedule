@@ -607,6 +607,15 @@ const GROUP_ORDER = [
   '2500~2800 TEU','4300 TEU','5500~6500 TEU'
 ];
 
+// Default ship display order
+const SHIP_ORDER = [
+  'KPS','KUS','KKL','KSG','KJT','KSH',
+  'KQD','KTJ','KHM','KNB','KSZ',
+  'KMB','KDB','KCN','KMN','KJA','KNH',
+  'KMU','KSL','KCB','KDE',
+  'SDL','SDY','SAC'
+];
+
 /* ==================================================
    APP STATE
 ================================================== */
@@ -628,6 +637,7 @@ const state = {
   schedules: {},    // vessel_code -> rows
   docks: [],        // from docks table
   favorites: { ship: [], port: [] },
+  hiddenShips: [],
 
   // UI
   activeTab: 'overview',
@@ -686,6 +696,12 @@ try {
   state.recentPorts =
     JSON.parse(
       localStorage.getItem('kmtc_recent') || '[]'
+    );
+} catch(e) {}
+try {
+  state.hiddenShips =
+    JSON.parse(
+      localStorage.getItem('kmtc_hidden') || '[]'
     );
 } catch(e) {}
 
@@ -1610,13 +1626,17 @@ function renderOverviewBody() {
     return;
   }
 
-  // All ships sorted: favorites first, then by group
+  // All ships sorted: favorites first, then SHIP_ORDER
   const favSet = new Set(state.favorites.ship);
-  const allShips = [...state.ships].sort((a, b) => {
+  const allShips = [...state.ships]
+    .filter(s => !isHiddenShip(s.code))
+    .sort((a, b) => {
     const af = favSet.has(a.code) ? 0 : 1;
     const bf = favSet.has(b.code) ? 0 : 1;
     if (af !== bf) return af - bf;
-    return 0;
+    const ai = SHIP_ORDER.indexOf(a.code);
+    const bi = SHIP_ORDER.indexOf(b.code);
+    return (ai < 0 ? 9999 : ai) - (bi < 0 ? 9999 : bi);
   });
 
   allShips.forEach(ship => {
@@ -1740,6 +1760,8 @@ function renderScheduleTab(container) {
       }}),
       `${fmtShort(parseDate(state.lastUpdate))} 업데이트 \xB7 `
       + `즐겨찾기 ${favCount}척 \xB7 전체 ${total}척`
+      + (state.hiddenShips.length
+        ? ` \xB7 숨김 ${state.hiddenShips.length}척` : '')
     ])
   );
 
@@ -1852,8 +1874,10 @@ function renderScheduleBody() {
     || state.dateTo);
 
   if (isFiltering) {
-    // Filtered search results
-    let results = state.ships.filter(ship => {
+    // Filtered search results (exclude hidden)
+    let results = state.ships
+      .filter(s => !isHiddenShip(s.code))
+      .filter(ship => {
       if (q) {
         const code = (ship.code || '').toUpperCase();
         const name = (ship.name || '').toUpperCase();
@@ -2047,7 +2071,14 @@ function renderScheduleBody() {
       const isSunny = s => s.code && !s.code.startsWith('K');
       const fleetShips = state.ships
         .filter(s => state.fleetTab === 'KMTC' ? isKmtc(s) : isSunny(s))
-        .filter(s => !favSet.has(s.code));
+        .filter(s => !favSet.has(s.code))
+        .filter(s => !isHiddenShip(s.code))
+        .sort((a, b) => {
+          const ai = SHIP_ORDER.indexOf(a.code);
+          const bi = SHIP_ORDER.indexOf(b.code);
+          return (ai < 0 ? 9999 : ai)
+            - (bi < 0 ? 9999 : bi);
+        });
 
       if (fleetShips.length) {
         fleetShips.forEach(ship => {
@@ -2498,6 +2529,46 @@ async function toggleShipFav(code) {
       state.user.email, 'ship', state.favorites.ship
     );
   }
+  render();
+}
+
+function isHiddenShip(code) {
+  return state.hiddenShips.includes(code);
+}
+
+function toggleHideShip(code) {
+  const idx = state.hiddenShips.indexOf(code);
+  if (idx >= 0) {
+    state.hiddenShips.splice(idx, 1);
+    showToast(code + ' 선박 표시됨');
+  } else {
+    state.hiddenShips.push(code);
+    // Remove from favorites if hidden
+    const fi = state.favorites.ship.indexOf(code);
+    if (fi >= 0) {
+      state.favorites.ship.splice(fi, 1);
+      if (state.user) {
+        saveFavorites(
+          state.user.email, 'ship',
+          state.favorites.ship
+        );
+      }
+    }
+    showToast(code + ' 선박 숨김됨');
+  }
+  saveHidden();
+  render();
+}
+
+function saveHidden() {
+  localStorage.setItem('kmtc_hidden',
+    JSON.stringify(state.hiddenShips));
+}
+
+function clearAllHidden() {
+  state.hiddenShips = [];
+  saveHidden();
+  showToast('모든 선박 표시됨');
   render();
 }
 
@@ -3778,16 +3849,98 @@ function renderSettingsTab(container) {
   container.appendChild(body);
 }
 
+function renderHiddenSettings(body) {
+  const hidden = state.ships.filter(
+    s => isHiddenShip(s.code)
+  );
+
+  if (!hidden.length) {
+    body.appendChild(
+      h('div', {style:{
+        background:'var(--card)',borderRadius:'14px',
+        border:'1px dashed var(--cardbr)',
+        padding:'26px 18px',textAlign:'center'
+      }}, [
+        h('div', {style:{fontSize:'30px',
+          marginBottom:'8px'}}, '\u{1F441}'),
+        h('div', {style:{fontSize:'13px',
+          color:'var(--muted)',lineHeight:'1.5'}},
+          '숨긴 선박이 없습니다.\n⭐ 즐겨찾기 탭에서 '
+          + '\u{1F441} 버튼으로 숨길 수 있습니다.')
+      ])
+    );
+    return;
+  }
+
+  body.appendChild(
+    h('div', {style:{fontSize:'12px',
+      color:'var(--muted)',marginBottom:'10px'}},
+      '숨긴 선박은 스케줄/현황 목록에 표시되지 않습니다.')
+  );
+
+  const list = h('div', {style:{
+    background:'var(--card)',borderRadius:'14px',
+    border:'1px solid var(--cardbr)',
+    overflow:'hidden',
+    boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+    marginBottom:'14px'
+  }});
+
+  hidden.forEach(s => {
+    list.appendChild(
+      h('div', {style:{
+        display:'flex',alignItems:'center',
+        justifyContent:'space-between',
+        padding:'10px 14px',
+        borderBottom:'1px solid var(--divider)'
+      }}, [
+        h('div', {style:{display:'flex',
+          alignItems:'baseline',gap:'7px'}}, [
+          h('span', {style:{fontFamily:'Inter',
+            fontWeight:'800',fontSize:'15px',
+            color:'var(--ink)'}}, s.code),
+          h('span', {style:{fontSize:'11px',
+            color:'#8794a8'}}, s.name || '')
+        ]),
+        h('span', {style:{
+          cursor:'pointer',fontSize:'12px',
+          fontWeight:'700',padding:'5px 12px',
+          borderRadius:'7px',
+          background:'var(--primary)',color:'#fff'
+        }, onClick: () => toggleHideShip(s.code)},
+          '표시')
+      ])
+    );
+  });
+  body.appendChild(list);
+
+  if (hidden.length > 1) {
+    body.appendChild(
+      h('div', {style:{textAlign:'center'}},
+        h('span', {style:{
+          display:'inline-block',cursor:'pointer',
+          fontSize:'13px',fontWeight:'700',
+          padding:'9px 22px',borderRadius:'10px',
+          background:'var(--primary)',color:'#fff'
+        }, onClick: clearAllHidden}, '전체 표시'))
+    );
+  }
+}
+
 function renderMyShipsSettings(body) {
   // Ship/Port sub toggle
   const subRow = h('div', {style:{
     display:'flex',gap:'8px',marginBottom:'12px'
   }});
-  ['ship', 'port'].forEach(type => {
-    const active = state.settingsSub === type;
-    const count = type === 'ship'
-      ? state.favorites.ship.length
-      : state.favorites.port.length;
+  [
+    {key:'ship', label:'\u2B50 즐겨찾기',
+      count: state.favorites.ship.length},
+    {key:'hidden', label:'\u{1F648} 숨김',
+      count: state.hiddenShips.length},
+    {key:'port', label:'\u2693 항구',
+      count: state.favorites.port.length}
+  ].forEach(item => {
+    const active = state.settingsSub === item.key;
     subRow.appendChild(
       h('span', {style:{
         flex:'1',textAlign:'center',fontSize:'12.5px',
@@ -3799,11 +3952,11 @@ function renderMyShipsSettings(body) {
         border: '1px solid '
           + (active ? 'var(--primary)' : 'var(--cardbr)')
       }, onClick: () => {
-        state.settingsSub = type;
+        state.settingsSub = item.key;
         state.favSearch = '';
         render();
-      }}, (type === 'ship' ? '\u{1F6A2} 선박 ('
-        : '\u2693 항구 (') + count + ')')
+      }}, item.label
+        + (item.count ? ' (' + item.count + ')' : ''))
     );
   });
   body.appendChild(subRow);
@@ -3839,6 +3992,11 @@ function renderMyShipsSettings(body) {
     );
   }
   body.appendChild(searchBox);
+
+  if (state.settingsSub === 'hidden') {
+    renderHiddenSettings(body);
+    return;
+  }
 
   if (state.settingsSub === 'ship') {
     // Fleet toggle
@@ -3895,12 +4053,14 @@ function renderMyShipsSettings(body) {
       const isFav = state.favorites.ship.includes(
         s.code
       );
+      const hidden = isHiddenShip(s.code);
       list.appendChild(
         h('div', {style:{
           display:'flex',alignItems:'center',
           justifyContent:'space-between',
           padding:'10px 14px',
-          borderBottom:'1px solid var(--divider)'
+          borderBottom:'1px solid var(--divider)',
+          opacity: hidden ? '0.4' : '1'
         }}, [
           h('div', {style:{display:'flex',
             alignItems:'baseline',gap:'7px',
@@ -3911,12 +4071,24 @@ function renderMyShipsSettings(body) {
             h('span', {style:{fontSize:'11px',
               color:'#8794a8'}}, s.name || '')
           ]),
-          h('span', {style:{
-            flex:'0 0 auto',cursor:'pointer',
-            fontSize:'18px',padding:'0 4px',
-            color: isFav ? '#f6a623' : '#c3ccda'
-          }, onClick: () => toggleShipFav(s.code)},
-            isFav ? '\u2605' : '\u2606')
+          h('div', {style:{display:'flex',
+            alignItems:'center',gap:'6px'}}, [
+            h('span', {style:{
+              flex:'0 0 auto',cursor:'pointer',
+              fontSize:'14px',padding:'2px 6px',
+              borderRadius:'6px',
+              color: hidden ? '#fff' : '#b3bccb',
+              background: hidden
+                ? 'var(--primary)' : 'transparent'
+            }, onClick: () => toggleHideShip(s.code)},
+              hidden ? '표시' : '\u{1F441}'),
+            h('span', {style:{
+              flex:'0 0 auto',cursor:'pointer',
+              fontSize:'18px',padding:'0 4px',
+              color: isFav ? '#f6a623' : '#c3ccda'
+            }, onClick: () => toggleShipFav(s.code)},
+              isFav ? '\u2605' : '\u2606')
+          ])
         ])
       );
     });
