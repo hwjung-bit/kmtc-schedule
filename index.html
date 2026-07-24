@@ -170,8 +170,8 @@ input[type=date]{color-scheme:light}
 .port-info{flex:1;display:flex;align-items:center;
   justify-content:space-between;gap:10px}
 .port-name{font-size:13px;color:var(--ink2)}
-.port-times{display:flex;gap:14px;flex:0 0 auto}
-.port-time{width:82px;text-align:right;
+.port-times{display:flex;gap:10px;flex:0 0 auto}
+.port-time{width:68px;text-align:right;
   font-family:'Inter';font-size:11px;color:var(--ink3)}
 
 /* ===== Toast ===== */
@@ -1928,6 +1928,7 @@ function renderScheduleBody() {
       } else {
         calls.slice(0, 50).forEach(c => {
           const eta = parseDate(c.eta);
+          const etb = parseDate(c.etb);
           const etd = parseDate(c.etd);
           const tCode = c.terminal ? c.terminal.split(' ')[0] : '';
           body.appendChild(
@@ -1963,6 +1964,9 @@ function renderScheduleBody() {
                 h('div', {style:{fontSize:'11px',
                   color:'#2e7d32',fontWeight:'700'}},
                   'ETA ' + (eta ? fmtShort(eta) : '-')),
+                h('div', {style:{fontSize:'11px',
+                  color:'#0064B4',fontWeight:'700',marginTop:'1px'}},
+                  'ETB ' + (etb ? fmtShort(etb) : '-')),
                 h('div', {style:{fontSize:'11px',
                   color:'#c25d00',fontWeight:'700',marginTop:'1px'}},
                   'ETD ' + (etd ? fmtShort(etd) : '-'))
@@ -2353,13 +2357,15 @@ function renderShipExpand(ship, schedule, color) {
   );
   portHeader.appendChild(
     h('div', {style:{
-      display:'flex',gap:'14px',
+      display:'flex',gap:'10px',
       fontFamily:'Inter',fontSize:'10px',
       fontWeight:'700',color:'#b3bccb'
     }}, [
-      h('span', {style:{width:'82px',
+      h('span', {style:{width:'68px',
         textAlign:'right'}}, 'ETA'),
-      h('span', {style:{width:'82px',
+      h('span', {style:{width:'68px',
+        textAlign:'right',color:'#0064B4'}}, 'ETB'),
+      h('span', {style:{width:'68px',
         textAlign:'right'}}, 'ETD')
     ])
   );
@@ -2400,6 +2406,7 @@ function renderShipExpand(ship, schedule, color) {
     const now = new Date();
     voyage.calls.forEach((call, i) => {
       const eta = parseDate(call.eta);
+      const etb = parseDate(call.etb);
       const etd = parseDate(call.etd);
       const isSkip = call.skip;
       const isPast = eta && eta <= now
@@ -2488,6 +2495,11 @@ function renderShipExpand(ship, schedule, color) {
       times.appendChild(
         h('span', {className: 'port-time'},
           eta ? fmtShort(eta) : '-')
+      );
+      times.appendChild(
+        h('span', {className: 'port-time',
+          style: { color: '#0064B4', fontWeight: '700' }},
+          etb ? fmtShort(etb) : '-')
       );
       times.appendChild(
         h('span', {className: 'port-time',
@@ -3219,6 +3231,7 @@ function renderCombinedSearch(body) {
 
   results.slice(0, 50).forEach(c => {
     const eta = parseDate(c.eta);
+    const etb = parseDate(c.etb);
     const etd = parseDate(c.etd);
     const ship = state.ships.find(s => s.code === c.vessel_code);
     const tCode = c.terminal ? c.terminal.split(' ')[0] : '';
@@ -3277,6 +3290,11 @@ function renderCombinedSearch(body) {
             color: isPast ? '#97a2b5' : '#2e7d32',
             fontWeight:'700'}},
             'ETA ' + (eta ? fmtShort(eta) : '-')),
+          h('div', {style:{fontSize:'11.5px',
+            color: isPast ? '#97a2b5' : '#0064B4',
+            fontWeight:'700',
+            marginTop:'1px'}},
+            'ETB ' + (etb ? fmtShort(etb) : '-')),
           h('div', {style:{fontSize:'11.5px',
             color: isPast ? '#97a2b5' : '#c25d00',
             fontWeight:'700',
@@ -3605,6 +3623,7 @@ function renderPortDetail(body) {
   } else {
     upcoming.forEach(c => {
       const eta = parseDate(c.eta);
+      const etb = parseDate(c.etb);
       const etd = parseDate(c.etd);
       const ship = state.ships.find(
         s => s.code === c.vessel_code
@@ -3651,6 +3670,10 @@ function renderPortDetail(body) {
             h('div', {style:{fontSize:'11.5px',
               color:'#2e7d32',fontWeight:'700'}},
               'ETA ' + (eta ? fmtShort(eta) : '-')),
+            h('div', {style:{fontSize:'11.5px',
+              color:'#0064B4',fontWeight:'700',
+              marginTop:'1px'}},
+              'ETB ' + (etb ? fmtShort(etb) : '-')),
             h('div', {style:{fontSize:'11.5px',
               color:'#c25d00',fontWeight:'700',
               marginTop:'1px'}},
