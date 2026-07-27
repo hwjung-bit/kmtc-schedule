@@ -2292,23 +2292,23 @@ function renderShipExpand(ship, schedule, color) {
     now.getTime() - 14 * 24 * 3600 * 1000);
   const showPast = state.showPastVoy[code] || false;
 
-  // Get recent + current + future voyages
+  // Get current + future voyages only (default view)
   const curVoyNo = schedule.current
     ? schedule.current.voyage_no : null;
-  const recentVoyages = schedule.voyages.filter(v =>
-    (v.lastEtd && !isNaN(v.lastEtd) && v.lastEtd >= past14)
-    || v.voyage_no === curVoyNo
+  const currentAndFuture = schedule.voyages.filter(v =>
+    v.voyage_no === curVoyNo
+    || (v.firstEta && !isNaN(v.firstEta) && v.firstEta >= now)
   );
-  // Past voyages (older than 14 days)
+  // Past voyages (everything before current)
   const pastVoyages = schedule.voyages.filter(v =>
-    v.lastEtd && !isNaN(v.lastEtd) && v.lastEtd < past14
-    && v.voyage_no !== curVoyNo
+    v.voyage_no !== curVoyNo
+    && v.lastEtd && !isNaN(v.lastEtd) && v.lastEtd < now
   );
 
   // Dedupe and sort
   const seen = new Set();
   const showVoyages = (showPast
-    ? schedule.voyages : recentVoyages)
+    ? schedule.voyages : currentAndFuture)
     .filter(v => {
       if (seen.has(v.voyage_no)) return false;
       seen.add(v.voyage_no); return true;
