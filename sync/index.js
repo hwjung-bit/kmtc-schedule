@@ -151,8 +151,7 @@ async function initFullFetch() {
 
   for (const ship of ships) {
     await fetchSingleVessel(ship.code, prefixes);
-    // Small delay between vessels
-    await sleep(300);
+    await sleep(100);
   }
 
   await sbUpsert('config', [{
@@ -181,15 +180,22 @@ async function fetchSingleVessel(vesselCode,
 
     for (let seq = 1; seq <= 50; seq++) {
       let found = false;
-      for (const dir of ALL_DIRS) {
-        const voy = pfx +
-          (seq < 10 ? '0' : '') + seq + dir;
-        const raw = await kmtcFetch(vesselCode, voy);
-        if (!raw.length) continue;
-        found = true;
-        const rows = normalizePortCalls(
-          vesselCode, voy, dir, raw);
-        allRows.push(...rows);
+      const seqStr = pfx +
+        (seq < 10 ? '0' : '') + seq;
+      const results = await Promise.all(
+        ALL_DIRS.map(async dir => {
+          const voy = seqStr + dir;
+          const raw = await kmtcFetch(vesselCode, voy);
+          if (!raw.length) return [];
+          return normalizePortCalls(
+            vesselCode, voy, dir, raw);
+        })
+      );
+      for (const rows of results) {
+        if (rows.length) {
+          found = true;
+          allRows.push(...rows);
+        }
       }
       if (found) {
         seenData++;
