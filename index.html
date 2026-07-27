@@ -3312,6 +3312,7 @@ function renderCombinedSearch(body) {
     return;
   }
 
+  let markedCurrent = false;
   displayResults.slice(0, 50).forEach(c => {
     const eta = parseDate(c.eta);
     const etb = parseDate(c.etb);
@@ -3321,6 +3322,10 @@ function renderCombinedSearch(body) {
     const isPast = etd && etd < now;
     const isBerthed = eta && eta <= now && etd && etd >= now;
 
+    // Mark first non-past item for scroll target
+    const isScrollTarget = !isPast && !markedCurrent;
+    if (isScrollTarget) markedCurrent = true;
+
     // Status badge
     const badge = isPast
       ? { text: '완료', bg: '#eef1f6', color: '#97a2b5' }
@@ -3328,8 +3333,9 @@ function renderCombinedSearch(body) {
         ? { text: '접안중', bg: '#e8f1fb', color: '#0064B4' }
         : { text: '예정', bg: '#e6f4ea', color: '#1b7a3d' };
 
-    body.appendChild(
-      h('div', {style:{
+    const card = h('div', {
+      id: isScrollTarget ? 'search-current-anchor' : '',
+      style:{
         background:'var(--card)',borderRadius:'14px',
         border:'1px solid var(--cardbr)',
         boxShadow:'0 2px 8px rgba(20,40,80,.05)',
@@ -3386,7 +3392,18 @@ function renderCombinedSearch(body) {
         ])
       ])
     );
+    body.appendChild(card);
   });
+
+  // Auto-scroll to current schedule when past is toggled open
+  if (showPastSearch && pastResults.length > 0) {
+    setTimeout(() => {
+      const anchor = document.getElementById(
+        'search-current-anchor');
+      if (anchor) anchor.scrollIntoView(
+        { behavior: 'auto', block: 'start' });
+    }, 50);
+  }
 
   if (displayResults.length > 50) {
     body.appendChild(
