@@ -645,6 +645,7 @@ const state = {
   expanded: null,
   voyTab: {},       // code -> 'cur'|'next'
   showPastVoy: {},  // code -> bool (show all past voyages)
+  showPastSearch: false, // show past results in search
   showSpec: {},     // code -> bool
   schedQuery: '',
   fleetTab: 'KMTC',
@@ -3242,9 +3243,8 @@ function renderCombinedSearch(body) {
         if (!portMatch) return;
       }
 
-      // Past 2 weeks + future calls
       const eta = parseDate(r.eta);
-      if (eta && eta >= past14) {
+      if (eta) {
         results.push({ ...r, vessel_code: code });
       }
     });
@@ -3252,9 +3252,52 @@ function renderCombinedSearch(body) {
 
   results.sort((a, b) => new Date(a.eta) - new Date(b.eta));
 
+  // Split into past and current+future
+  const pastResults = results.filter(r => {
+    const eta = parseDate(r.eta);
+    return eta && eta < past14;
+  });
+  const recentResults = results.filter(r => {
+    const eta = parseDate(r.eta);
+    return eta && eta >= past14;
+  });
+  const showPastSearch = state.showPastSearch || false;
+  const displayResults = showPastSearch
+    ? results : recentResults;
+
+  // Past toggle button
+  if (pastResults.length > 0) {
+    body.appendChild(
+      h('div', {
+        style: {
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'center', gap: '5px',
+          padding: '8px 0', marginBottom: '10px',
+          fontSize: '11px', color: '#7d8aa0',
+          cursor: 'pointer', userSelect: 'none',
+          background: 'var(--card)',
+          borderRadius: '10px',
+          border: '1px dashed #d0d6e0'
+        },
+        onClick: () => {
+          state.showPastSearch = !showPastSearch;
+          render();
+        }
+      }, [
+        h('span', {style: {fontSize: '10px'}},
+          showPastSearch ? '▲' : '▼'),
+        showPastSearch
+          ? '이전 기록 숨기기'
+          : '이전 기록 보기 (' + pastResults.length
+            + '건)'
+      ])
+    );
+  }
+
   body.appendChild(
     h('div', {className: 'section-label'},
-      (sq || '전체') + (pq ? ' → ' + pq : '') + ' 스케줄 (' + results.length + '건)')
+      (sq || '전체') + (pq ? ' → ' + pq : '')
+      + ' 스케줄 (' + displayResults.length + '건)')
   );
 
   if (!results.length) {
@@ -3269,7 +3312,7 @@ function renderCombinedSearch(body) {
     return;
   }
 
-  results.slice(0, 50).forEach(c => {
+  displayResults.slice(0, 50).forEach(c => {
     const eta = parseDate(c.eta);
     const etb = parseDate(c.etb);
     const etd = parseDate(c.etd);
@@ -3345,12 +3388,12 @@ function renderCombinedSearch(body) {
     );
   });
 
-  if (results.length > 50) {
+  if (displayResults.length > 50) {
     body.appendChild(
       h('div', {style:{
         textAlign:'center',fontSize:'12px',
         color:'var(--muted)',padding:'10px'
-      }}, '외 ' + (results.length - 50) + '건 더...')
+      }}, '외 ' + (displayResults.length - 50) + '건 더...')
     );
   }
 }
