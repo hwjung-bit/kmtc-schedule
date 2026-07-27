@@ -50,6 +50,7 @@ function normalizePortCalls(vesselCode, voyageNo,
   return raw.map(p => {
     const arr = p.arrival || {};
     const dep = p.departure || {};
+    const bth = p.berthing || {};
     return {
       vessel_code: vesselCode,
       voyage_no: voyageNo,
@@ -59,6 +60,8 @@ function normalizePortCalls(vesselCode, voyageNo,
       terminal: ((p.tmnlCode || '') + ' ' +
         (p.tmnlName || '')).trim(),
       eta: fmtDate(arr.arrivalDate, arr.arrivalTime),
+      etb: fmtDate(bth.berthingDate,
+        bth.berthingTime),
       etd: fmtDate(dep.departureDate,
         dep.departureTime),
       arrival_status: arr.arrivalStatusCode || '',

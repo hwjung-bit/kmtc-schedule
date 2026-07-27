@@ -644,6 +644,7 @@ const state = {
   loading: false,
   expanded: null,
   voyTab: {},       // code -> 'cur'|'next'
+  showPastVoy: {},  // code -> bool (show all past voyages)
   showSpec: {},     // code -> bool
   schedQuery: '',
   fleetTab: 'KMTC',
@@ -2289,17 +2290,25 @@ function renderShipExpand(ship, schedule, color) {
   const now = new Date();
   const past14 = new Date(
     now.getTime() - 14 * 24 * 3600 * 1000);
+  const showPast = state.showPastVoy[code] || false;
 
   // Get recent + current + future voyages
   const curVoyNo = schedule.current
     ? schedule.current.voyage_no : null;
-  const futureVoyages = schedule.voyages.filter(v =>
+  const recentVoyages = schedule.voyages.filter(v =>
     (v.lastEtd && !isNaN(v.lastEtd) && v.lastEtd >= past14)
     || v.voyage_no === curVoyNo
   );
+  // Past voyages (older than 14 days)
+  const pastVoyages = schedule.voyages.filter(v =>
+    v.lastEtd && !isNaN(v.lastEtd) && v.lastEtd < past14
+    && v.voyage_no !== curVoyNo
+  );
+
   // Dedupe and sort
   const seen = new Set();
-  const showVoyages = futureVoyages
+  const showVoyages = (showPast
+    ? schedule.voyages : recentVoyages)
     .filter(v => {
       if (seen.has(v.voyage_no)) return false;
       seen.add(v.voyage_no); return true;
@@ -2310,6 +2319,32 @@ function renderShipExpand(ship, schedule, color) {
     schedule.voyages.slice(-3).forEach(v => {
       if (!seen.has(v.voyage_no)) showVoyages.push(v);
     });
+  }
+
+  // Past voyages toggle button
+  if (pastVoyages.length > 0) {
+    const toggleBtn = h('div', {
+      style: {
+        display: 'flex', alignItems: 'center',
+        justifyContent: 'center', gap: '5px',
+        padding: '6px 0', marginBottom: '8px',
+        fontSize: '11px', color: '#7d8aa0',
+        cursor: 'pointer', userSelect: 'none',
+        borderBottom: '1px dashed #e0e4ea'
+      },
+      onClick: () => {
+        state.showPastVoy[code] = !showPast;
+        if (!showPast) state.voyTab[code] = 'cur';
+        renderScheduleBody();
+      }
+    }, [
+      h('span', {style: {fontSize: '10px'}},
+        showPast ? '▲' : '▼'),
+      showPast
+        ? '이전 항차 숨기기'
+        : '이전 항차 보기 (' + pastVoyages.length + ')'
+    ]);
+    panel.appendChild(toggleBtn);
   }
 
   if (showVoyages.length > 1) {
@@ -2323,12 +2358,17 @@ function renderShipExpand(ship, schedule, color) {
       const tabKey = v.voyage_no;
       const active = voyTab === tabKey ||
         (voyTab === 'cur' && isCur);
+      const isPastVoy = v.lastEtd && v.lastEtd < past14
+        && !isCur;
       tabsDiv.appendChild(
         h('div', {
           className: 'voy-tab'
             + (active ? ' active' : ''),
-          style: { flex: '0 0 auto', minWidth: '80px',
-            whiteSpace: 'nowrap', fontSize: '11px' },
+          style: {
+            flex: '0 0 auto', minWidth: '80px',
+            whiteSpace: 'nowrap', fontSize: '11px',
+            opacity: isPastVoy ? '0.55' : '1'
+          },
           onClick: () => {
             state.voyTab[code] = tabKey;
             renderScheduleBody();
