@@ -5038,6 +5038,167 @@ function renderSystemSettings(body) {
     ])
   );
 
+  // ── Admin: Instant Sync via GitHub Actions ──
+  const isSuper = isSuperAdmin(state.user.email);
+  const isAdmin = state.user.role === 'admin'
+    || isSuper;
+  if (isAdmin) {
+    const syncCard = h('div', {style:{
+      marginTop:'12px',background:'var(--card)',
+      borderRadius:'14px',
+      border:'1px solid var(--cardbr)',
+      boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+      padding:'16px'
+    }});
+    syncCard.appendChild(
+      h('div', {style:{fontSize:'13px',
+        fontWeight:'700',color:'var(--ink)',
+        marginBottom:'10px'}},
+        '\u26A1 즉시 스케줄 동기화')
+    );
+    syncCard.appendChild(
+      h('div', {style:{fontSize:'11px',
+        color:'var(--ink3)',marginBottom:'12px',
+        lineHeight:'1.5'}},
+        'GitHub Actions를 즉시 실행하여 '
+        + 'KMTC API에서 최신 스케줄을 가져옵니다. '
+        + '처음 사용 시 GitHub PAT 설정이 필요합니다.')
+    );
+
+    const hasPat = !!localStorage.getItem(
+      'kmtc_gh_pat');
+
+    if (!hasPat) {
+      const patInput = h('input', {type:'password',
+        placeholder:'GitHub Personal Access Token',
+        style:{width:'100%',height:'40px',
+          border:'1px solid var(--cardbr)',
+          borderRadius:'10px',padding:'0 12px',
+          fontSize:'13px',marginBottom:'8px',
+          background:'var(--page)',
+          color:'var(--ink)'}});
+      syncCard.appendChild(patInput);
+      syncCard.appendChild(
+        h('button', {style:{
+          width:'100%',height:'40px',border:'none',
+          borderRadius:'10px',
+          background:'#28a745',color:'#fff',
+          fontWeight:'700',fontSize:'13px',
+          cursor:'pointer',marginBottom:'8px'
+        }, onClick: () => {
+          const v = patInput.value.trim();
+          if (!v) {
+            showToast('PAT을 입력하세요');
+            return;
+          }
+          localStorage.setItem('kmtc_gh_pat', v);
+          showToast('\u2713 PAT 저장 완료');
+          render();
+        }}, '\u{1F512} PAT 저장')
+      );
+    } else {
+      // Sync mode selector
+      const modeSelect = h('select', {style:{
+        width:'100%',height:'40px',
+        border:'1px solid var(--cardbr)',
+        borderRadius:'10px',padding:'0 12px',
+        fontSize:'13px',marginBottom:'8px',
+        background:'var(--page)',
+        color:'var(--ink)'}}, [
+        h('option', {value:'incremental'},
+          'Incremental (변경분만)'),
+        h('option', {value:'full'},
+          'Full (전체 재수집)')
+      ]);
+      syncCard.appendChild(modeSelect);
+
+      syncCard.appendChild(
+        h('button', {style:{
+          width:'100%',height:'46px',border:'none',
+          borderRadius:'12px',
+          background:
+            'linear-gradient(135deg,#e65100,#ff6d00)',
+          color:'#fff',fontWeight:'700',
+          fontSize:'14px',cursor:'pointer',
+          display:'flex',alignItems:'center',
+          justifyContent:'center',gap:'8px'
+        }, onClick: async function() {
+          const pat = localStorage.getItem(
+            'kmtc_gh_pat');
+          if (!pat) {
+            showToast('PAT이 없습니다. 재설정하세요.');
+            return;
+          }
+          this.disabled = true;
+          this.textContent = '동기화 요청 중...';
+          try {
+            const resp = await fetch(
+              'https://api.github.com/repos/'
+              + 'hwjung-bit/kmtc-schedule/actions/'
+              + 'workflows/sync.yml/dispatches',
+              { method: 'POST',
+                headers: {
+                  'Authorization': 'token ' + pat,
+                  'Accept':
+                    'application/vnd.github.v3+json'
+                },
+                body: JSON.stringify({
+                  ref: 'master',
+                  inputs: {
+                    mode: modeSelect.value
+                  }
+                })
+              }
+            );
+            if (resp.status === 204) {
+              showToast(
+                '\u2713 동기화 시작! 약 10분 후 반영');
+            } else if (resp.status === 401
+              || resp.status === 403) {
+              localStorage.removeItem('kmtc_gh_pat');
+              showToast(
+                'PAT이 만료/무효합니다. 재설정하세요.');
+              render();
+            } else {
+              showToast(
+                '오류: HTTP ' + resp.status);
+            }
+          } catch (e) {
+            showToast('네트워크 오류: ' + e.message);
+          }
+          this.disabled = false;
+          this.innerHTML = '';
+          this.appendChild(
+            h('span', {style:{fontSize:'16px'}},
+              '\u26A1'));
+          this.appendChild(
+            document.createTextNode(
+              ' 즉시 동기화 실행'));
+        }}, [
+          h('span', {style:{fontSize:'16px'}},
+            '\u26A1'),
+          '즉시 동기화 실행'
+        ])
+      );
+
+      // PAT reset link
+      syncCard.appendChild(
+        h('div', {style:{textAlign:'center',
+          marginTop:'8px'}}, [
+          h('a', {href:'#',style:{fontSize:'11px',
+            color:'var(--ink3)'},
+            onClick: (e) => {
+              e.preventDefault();
+              localStorage.removeItem('kmtc_gh_pat');
+              showToast('PAT 초기화됨');
+              render();
+            }}, 'PAT 재설정')
+        ])
+      );
+    }
+    card.appendChild(syncCard);
+  }
+
   // Stats
   const stats = h('div', {style:{
     marginTop:'16px',borderTop:'1px solid var(--divider)',
