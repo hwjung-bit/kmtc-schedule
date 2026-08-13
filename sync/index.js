@@ -32,6 +32,13 @@ function isRateLimited(body) {
   return /too many requests/i.test(reason);
 }
 
+// The gateway answers an unknown voyage with a plain object rather
+// than an empty array. That is a valid "no such voyage", not an error.
+function isNoData(body) {
+  if (!body || typeof body !== 'object') return false;
+  return /no data found/i.test(String(body.resultData || ''));
+}
+
 function backoffMs(resp, attempt) {
   const ra = parseInt(
     resp.headers.get('retry-after') || '', 10);
@@ -81,6 +88,7 @@ async function kmtcFetch(vesselCode, voyageNo) {
           await sleep(backoffMs(resp, attempt));
           continue;
         }
+        if (isNoData(body)) return { ok: true, rows: [] };
         failedFetches++;
         console.error(`Bad payload ${vesselCode}/${voyageNo}:`,
           JSON.stringify(body).slice(0, 120));
