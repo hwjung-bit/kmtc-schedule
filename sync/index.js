@@ -14,24 +14,72 @@ const sb = createClient(
 
 const ALL_DIRS = ['S', 'N', 'E', 'W', 'D', 'P'];
 
+// Minimum spacing between KMTC API calls. The gateway rate-limits
+// aggressively; bursts get 429 "Resource usage has been exhausted".
+const MIN_INTERVAL_MS = 800;
+const MAX_RETRIES = 5;
+
+let lastCallAt = 0;
+let rateLimitHits = 0;
+let failedFetches = 0;
+
 // ── KMTC API ────────────────────────────────────────────────────────────────
 
+/**
+ * Fetch one voyage. Returns { ok, rows }.
+ * ok=false means the API call failed (429/5xx/network) — callers must NOT
+ * treat that as "no schedule", or stale data gets deleted or skipped.
+ */
 async function kmtcFetch(vesselCode, voyageNo) {
-  try {
-    const url = `${KMTC_API}?vesselCode=${
-      encodeURIComponent(vesselCode)
-    }&voyageNo=${encodeURIComponent(voyageNo)}`;
-    const resp = await fetch(url, {
-      headers: { 'KMTC-APIKey': KMTC_KEY }
-    });
-    if (!resp.ok) return [];
-    const body = await resp.json();
-    return Array.isArray(body) ? body : [];
-  } catch (e) {
-    console.error(`API error ${vesselCode}/${voyageNo}:`,
-      e.message);
-    return [];
+  const url = `${KMTC_API}?vesselCode=${
+    encodeURIComponent(vesselCode)
+  }&voyageNo=${encodeURIComponent(voyageNo)}`;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const wait = lastCallAt + MIN_INTERVAL_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastCallAt = Date.now();
+
+    try {
+      const resp = await fetch(url, {
+        headers: { 'KMTC-APIKey': KMTC_KEY }
+      });
+
+      if (resp.status === 429) {
+        rateLimitHits++;
+        const ra = parseInt(
+          resp.headers.get('retry-after') || '', 10);
+        const backoff = ra > 0
+          ? ra * 1000
+          : 3000 * Math.pow(2, attempt);
+        await sleep(Math.min(backoff, 60000));
+        continue;
+      }
+      if (!resp.ok) {
+        failedFetches++;
+        console.error(`HTTP ${resp.status} ` +
+          `${vesselCode}/${voyageNo}`);
+        return { ok: false, rows: [] };
+      }
+
+      const body = await resp.json();
+      // Non-array body = error envelope, not an empty schedule
+      if (!Array.isArray(body)) {
+        failedFetches++;
+        return { ok: false, rows: [] };
+      }
+      return { ok: true, rows: body };
+    } catch (e) {
+      console.error(`API error ${vesselCode}/${voyageNo}:`,
+        e.message);
+      await sleep(1000 * (attempt + 1));
+    }
   }
+
+  failedFetches++;
+  console.error(`GIVE UP after ${MAX_RETRIES} retries: ` +
+    `${vesselCode}/${voyageNo}`);
+  return { ok: false, rows: [] };
 }
 
 function fmtDate(d, t) {
@@ -96,16 +144,19 @@ async function sbGet(table, query) {
 }
 
 async function sbPost(table, rows) {
-  if (!rows || !rows.length) return;
+  if (!rows || !rows.length) return true;
+  let ok = true;
   // Batch in chunks of 500
   for (let i = 0; i < rows.length; i += 500) {
     const batch = rows.slice(i, i + 500);
     const { error } = await sb.from(table).insert(batch);
     if (error) {
+      ok = false;
       console.error('Supabase INSERT error:',
         error.message);
     }
   }
+  return ok;
 }
 
 async function sbUpsert(table, rows, onConflict) {
@@ -174,6 +225,7 @@ async function fetchSingleVessel(vesselCode,
 
   const allRows = [];
   let maxSeq = 0, maxPrefix = prefixes[0];
+  let incomplete = false;
 
   for (const pfx of prefixes) {
     let empties = 0, seenData = 0;
@@ -182,20 +234,16 @@ async function fetchSingleVessel(vesselCode,
       let found = false;
       const seqStr = pfx +
         (seq < 10 ? '0' : '') + seq;
-      const results = await Promise.all(
-        ALL_DIRS.map(async dir => {
-          const voy = seqStr + dir;
-          const raw = await kmtcFetch(vesselCode, voy);
-          if (!raw.length) return [];
-          return normalizePortCalls(
-            vesselCode, voy, dir, raw);
-        })
-      );
-      for (const rows of results) {
-        if (rows.length) {
-          found = true;
-          allRows.push(...rows);
-        }
+      // Sequential, not parallel — 6 concurrent calls trip the
+      // gateway rate limit immediately.
+      for (const dir of ALL_DIRS) {
+        const voy = seqStr + dir;
+        const res = await kmtcFetch(vesselCode, voy);
+        if (!res.ok) { incomplete = true; continue; }
+        if (!res.rows.length) continue;
+        found = true;
+        allRows.push(...normalizePortCalls(
+          vesselCode, voy, dir, res.rows));
       }
       if (found) {
         seenData++;
@@ -213,12 +261,20 @@ async function fetchSingleVessel(vesselCode,
     }
   }
 
+  // Never wipe good data on a partial fetch — a rate-limited run
+  // would otherwise delete the vessel and re-insert almost nothing.
+  if (incomplete || !allRows.length) {
+    console.error(`${vesselCode}: fetch incomplete ` +
+      `(${allRows.length} rows) — keeping existing data`);
+    return 0;
+  }
+
   // Delete existing data for this vessel
   await sbDelete('schedules',
     { vessel_code: vesselCode });
 
   // Insert all rows
-  if (allRows.length) await sbPost('schedules', allRows);
+  await sbPost('schedules', allRows);
 
   // Update voyage cache
   await sbUpsert('voyage_cache', [{
@@ -282,16 +338,21 @@ async function syncSchedules() {
     const newRows = [];
     let maxSeq = c.seq;
 
+    let discoveryFailed = false;
+
     for (let ns = c.seq + 1; ns <= c.seq + 3; ns++) {
       let seqFound = false;
       for (const dir of ALL_DIRS) {
         const voy = c.prefix +
           (ns < 10 ? '0' : '') + ns + dir;
-        const raw = await kmtcFetch(vc, voy);
-        if (!raw.length) continue;
+        const res = await kmtcFetch(vc, voy);
+        // A failed call is not proof the voyage is absent —
+        // stop advancing instead of recording a false ceiling.
+        if (!res.ok) { discoveryFailed = true; break; }
+        if (!res.rows.length) continue;
         seqFound = true;
         const rows = normalizePortCalls(
-          vc, voy, dir, raw);
+          vc, voy, dir, res.rows);
         for (const r of rows) {
           const key =
             `${r.vessel_code}:${r.voyage_no}:${r.port_code}`;
@@ -301,6 +362,7 @@ async function syncSchedules() {
           }
         }
       }
+      if (discoveryFailed) break;
       if (seqFound) maxSeq = ns;
       else break;
     }
@@ -309,7 +371,7 @@ async function syncSchedules() {
       await sbPost('schedules', newRows);
       totalNew += newRows.length;
     }
-    if (maxSeq > c.seq) {
+    if (!discoveryFailed && maxSeq > c.seq) {
       await sbUpsert('voyage_cache', [{
         vessel_code: vc,
         last_prefix: c.prefix,
@@ -318,17 +380,24 @@ async function syncSchedules() {
     }
 
     // ── Step 2: Active + Future status updates ──
-    // 30-day lookback to catch currently berthed ships
+    // 30-day lookback to catch currently berthed ships,
+    // 90-day horizon ahead — voyages further out are not
+    // firm anyway and refreshing them burns the API quota.
     const past30 = new Date(
       Date.now() - 30 * 24 * 3600 * 1000);
     const past30Str = past30.toISOString()
+      .split('T')[0];
+    const ahead90 = new Date(
+      Date.now() + 90 * 24 * 3600 * 1000);
+    const ahead90Str = ahead90.toISOString()
       .split('T')[0];
 
     const { data: futureRows } = await sb
       .from('schedules')
       .select('id,voyage_no,port_code')
       .eq('vessel_code', vc)
-      .gte('eta', past30Str);
+      .gte('eta', past30Str)
+      .lte('eta', ahead90Str);
 
     // Group by voyage
     const futureVoys = new Set();
@@ -336,12 +405,15 @@ async function syncSchedules() {
       futureVoys.add(r.voyage_no);
     });
 
-    let updatedCount = 0;
+    let updatedCount = 0, refreshedVoys = 0, skippedVoys = 0;
     for (const fvoy of futureVoys) {
-      const fraw = await kmtcFetch(vc, fvoy);
-      if (!fraw.length) continue;
+      const res = await kmtcFetch(vc, fvoy);
+      // API failed or returned nothing — keep what we have
+      if (!res.ok) { skippedVoys++; continue; }
+      if (!res.rows.length) continue;
       const frows = normalizePortCalls(
-        vc, fvoy, '', fraw);
+        vc, fvoy, '', res.rows);
+      if (!frows.length) continue;
 
       // Delete old rows for this voyage
       await sbDelete('schedules', {
@@ -349,13 +421,19 @@ async function syncSchedules() {
         voyage_no: fvoy
       });
       // Insert fresh
-      await sbPost('schedules', frows);
+      const inserted = await sbPost('schedules', frows);
+      if (!inserted) {
+        console.error(`DATA LOSS RISK ${vc}/${fvoy}: ` +
+          `deleted but insert failed`);
+      }
+      refreshedVoys++;
       updatedCount += frows.length;
     }
 
     totalUpdated += updatedCount;
     console.log(`${vc}: +${newRows.length} new,` +
-      ` ${futureVoys.size} voys refreshed`);
+      ` ${refreshedVoys}/${futureVoys.size} voys refreshed` +
+      (skippedVoys ? `, ${skippedVoys} skipped (API)` : ''));
 
     await sleep(300);
   }
@@ -368,6 +446,16 @@ async function syncSchedules() {
 
   console.log(`=== SYNC DONE: +${totalNew} new,` +
     ` ${totalUpdated} updated ===`);
+}
+
+function reportApiHealth() {
+  console.log(`API: ${rateLimitHits} rate-limit retries,` +
+    ` ${failedFetches} failed fetches`);
+  if (failedFetches > 0) {
+    console.error('WARNING: some voyages could not be ' +
+      'fetched — data may be stale. Consider raising ' +
+      'MIN_INTERVAL_MS or lowering the cron frequency.');
+  }
 }
 
 // ── Utilities ───────────────────────────────────────────────────────────────
@@ -391,6 +479,8 @@ async function main() {
   } else {
     await syncSchedules();
   }
+
+  reportApiHealth();
 }
 
 main().catch(err => {
