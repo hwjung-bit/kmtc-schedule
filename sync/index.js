@@ -314,10 +314,20 @@ async function fetchSingleVessel(vesselCode,
   return allRows.length;
 }
 
-// ── Incremental Sync (6-hour trigger) ───────────────────────────────────────
+// ── Incremental Sync ────────────────────────────────────────────────────────
 
-async function syncSchedules() {
-  console.log('=== INCREMENTAL SYNC START ===');
+/**
+ * opts.discover   probe for voyages past the cached sequence
+ * opts.aheadDays  how far ahead to refresh existing voyages
+ *
+ * The gateway meters total request volume, so the frequent run keeps
+ * both numbers small and a once-a-day run does the wide sweep.
+ */
+async function syncSchedules(opts) {
+  const discover = opts.discover;
+  const aheadDays = opts.aheadDays;
+  console.log(`=== SYNC START (discover=${discover},` +
+    ` ahead=${aheadDays}d) ===`);
   const { data: ships } = await sb
     .from('ships').select('code');
   if (!ships || !ships.length) {
@@ -336,16 +346,27 @@ async function syncSchedules() {
     };
   });
 
-  // Get existing schedule keys for dedup
-  const { data: existingRows } = await sb
-    .from('schedules')
-    .select('vessel_code,voyage_no,port_code');
+  // Get existing schedule keys for dedup. PostgREST caps a plain
+  // select at 1000 rows, so page through the table explicitly.
   const existingKeys = new Set();
-  (existingRows || []).forEach(r => {
-    existingKeys.add(
-      `${r.vessel_code}:${r.voyage_no}:${r.port_code}`
-    );
-  });
+  if (discover) {
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data: page } = await sb
+        .from('schedules')
+        .select('vessel_code,voyage_no,port_code')
+        .order('id', { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (!page || !page.length) break;
+      page.forEach(r => {
+        existingKeys.add(
+          `${r.vessel_code}:${r.voyage_no}:${r.port_code}`
+        );
+      });
+      if (page.length < PAGE) break;
+    }
+    console.log(`dedup keys: ${existingKeys.size}`);
+  }
 
   let totalNew = 0, totalUpdated = 0;
 
@@ -366,7 +387,7 @@ async function syncSchedules() {
 
     let discoveryFailed = false;
 
-    for (let ns = c.seq + 1; ns <= c.seq + 3; ns++) {
+    for (let ns = c.seq + 1; discover && ns <= c.seq + 3; ns++) {
       let seqFound = false;
       for (const dir of ALL_DIRS) {
         const voy = c.prefix +
@@ -406,16 +427,16 @@ async function syncSchedules() {
     }
 
     // ── Step 2: Active + Future status updates ──
-    // 30-day lookback to catch currently berthed ships,
-    // 90-day horizon ahead — voyages further out are not
-    // firm anyway and refreshing them burns the API quota.
+    // 30-day lookback to catch currently berthed ships;
+    // the horizon ahead is short on the frequent run because
+    // distant voyages are not firm and cost API quota.
     const past30 = new Date(
       Date.now() - 30 * 24 * 3600 * 1000);
     const past30Str = past30.toISOString()
       .split('T')[0];
-    const ahead90 = new Date(
-      Date.now() + 90 * 24 * 3600 * 1000);
-    const ahead90Str = ahead90.toISOString()
+    const ahead = new Date(
+      Date.now() + aheadDays * 24 * 3600 * 1000);
+    const aheadStr = ahead.toISOString()
       .split('T')[0];
 
     const { data: futureRows } = await sb
@@ -423,7 +444,7 @@ async function syncSchedules() {
       .select('id,voyage_no,port_code')
       .eq('vessel_code', vc)
       .gte('eta', past30Str)
-      .lte('eta', ahead90Str);
+      .lte('eta', aheadStr);
 
     // Group by voyage
     const futureVoys = new Set();
@@ -479,8 +500,9 @@ function reportApiHealth() {
     ` ${failedFetches} failed fetches`);
   if (failedFetches > 0) {
     console.error('WARNING: some voyages could not be ' +
-      'fetched — data may be stale. Consider raising ' +
-      'MIN_INTERVAL_MS or lowering the cron frequency.');
+      'fetched — data may be stale. The gateway meters total ' +
+      'volume, so cut calls (shorter horizon, fewer runs) ' +
+      'rather than slowing them down.');
   }
 }
 
@@ -502,8 +524,12 @@ async function main() {
     await initFullFetch();
   } else if (mode === 'single' && vesselCode) {
     await fetchSingleVessel(vesselCode);
+  } else if (mode === 'daily') {
+    // Once a day: look for new voyages and refresh the wide horizon
+    await syncSchedules({ discover: true, aheadDays: 90 });
   } else {
-    await syncSchedules();
+    // Frequent run: only the voyages crews actually look at
+    await syncSchedules({ discover: false, aheadDays: 30 });
   }
 
   reportApiHealth();

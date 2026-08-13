@@ -2,8 +2,10 @@ name: KMTC Schedule Sync
 
 on:
   schedule:
-    # Every 6 hours — the KMTC gateway rate-limits hourly runs
-    - cron: '0 */6 * * *'
+    # Frequent run — next 30 days only, no voyage discovery
+    - cron: '0 */2 * * *'
+    # Daily wide sweep — 90-day horizon + new voyage discovery (05:40 KST)
+    - cron: '40 20 * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -13,12 +15,19 @@ on:
         type: choice
         options:
           - incremental
+          - daily
           - full
           - single
       vessel_code:
         description: 'Vessel code (for single mode only)'
         required: false
         default: ''
+
+# The gateway meters total request volume — overlapping runs starve
+# each other, so queue instead of running side by side.
+concurrency:
+  group: kmtc-sync
+  cancel-in-progress: false
 
 jobs:
   sync:
@@ -43,6 +52,6 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           KMTC_API_URL: 'http://apigateway.ekmtc.com/gateway/vesselSchedule/v1/events'
           KMTC_API_KEY: ${{ secrets.KMTC_API_KEY }}
-          SYNC_MODE: ${{ github.event.inputs.mode || 'incremental' }}
+          SYNC_MODE: ${{ github.event.inputs.mode || (github.event.schedule == '40 20 * * *' && 'daily' || 'incremental') }}
           VESSEL_CODE: ${{ github.event.inputs.vessel_code || '' }}
         run: node index.js
