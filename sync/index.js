@@ -25,6 +25,20 @@ let failedFetches = 0;
 
 // ── KMTC API ────────────────────────────────────────────────────────────────
 
+function isRateLimited(body) {
+  if (!body || typeof body !== 'object') return false;
+  if (String(body.statusCode) === '429') return true;
+  const reason = (body.errors || {}).reason || '';
+  return /too many requests/i.test(reason);
+}
+
+function backoffMs(resp, attempt) {
+  const ra = parseInt(
+    resp.headers.get('retry-after') || '', 10);
+  const ms = ra > 0 ? ra * 1000 : 3000 * Math.pow(2, attempt);
+  return Math.min(ms, 60000);
+}
+
 /**
  * Fetch one voyage. Returns { ok, rows }.
  * ok=false means the API call failed (429/5xx/network) — callers must NOT
@@ -47,12 +61,7 @@ async function kmtcFetch(vesselCode, voyageNo) {
 
       if (resp.status === 429) {
         rateLimitHits++;
-        const ra = parseInt(
-          resp.headers.get('retry-after') || '', 10);
-        const backoff = ra > 0
-          ? ra * 1000
-          : 3000 * Math.pow(2, attempt);
-        await sleep(Math.min(backoff, 60000));
+        await sleep(backoffMs(resp, attempt));
         continue;
       }
       if (!resp.ok) {
@@ -63,9 +72,18 @@ async function kmtcFetch(vesselCode, voyageNo) {
       }
 
       const body = await resp.json();
-      // Non-array body = error envelope, not an empty schedule
+      // Non-array body = error envelope, not an empty schedule.
+      // The gateway also returns its 429 envelope with HTTP 200,
+      // so check the payload before giving up.
       if (!Array.isArray(body)) {
+        if (isRateLimited(body)) {
+          rateLimitHits++;
+          await sleep(backoffMs(resp, attempt));
+          continue;
+        }
         failedFetches++;
+        console.error(`Bad payload ${vesselCode}/${voyageNo}:`,
+          JSON.stringify(body).slice(0, 120));
         return { ok: false, rows: [] };
       }
       return { ok: true, rows: body };
