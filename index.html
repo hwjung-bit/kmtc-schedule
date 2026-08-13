@@ -5038,11 +5038,9 @@ function renderSystemSettings(body) {
     ])
   );
 
-  // ── Admin: Instant Sync via GitHub Actions ──
+  // ── Super admin only: Instant Sync via GitHub Actions ──
   const isSuper = isSuperAdmin(state.user.email);
-  const isAdmin = state.user.role === 'admin'
-    || isSuper;
-  if (isAdmin) {
+  if (isSuper) {
     const syncCard = h('div', {style:{
       marginTop:'12px',background:'var(--card)',
       borderRadius:'14px',
