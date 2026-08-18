@@ -646,6 +646,10 @@ const state = {
   voyTab: {},       // code -> 'cur'|'next'
   showPastVoy: {},  // code -> bool (show all past voyages)
   showPastSearch: false, // show past results in search
+  histLoaded: false,     // full archive pulled
+  histLoading: false,
+  callLimit: 50,         // date-range list page size
+  searchLimit: 50,       // schedule-tab list page size
   showSpec: {},     // code -> bool
   schedQuery: '',
   fleetTab: 'KMTC',
@@ -741,28 +745,42 @@ async function loadShips() {
   return data || [];
 }
 
-async function loadScheduleFor(codes) {
+// Oldest ETA held in the schedules table
+const HISTORY_START = '2020-01-01T00:00:00.000Z';
+
+async function loadScheduleFor(codes, sinceISO) {
   if (!codes.length) return {};
   const map = {};
+  // Default window: past 6 months + all future data
+  let cutoff = sinceISO;
+  if (!cutoff) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 6);
+    cutoff = d.toISOString();
+  }
   // Load per vessel to avoid 1000-row limit
   // Batch 3 at a time for speed
   for (let i = 0; i < codes.length; i += 3) {
     const batch = codes.slice(i, i + 3);
     const promises = batch.map(async (code) => {
-      // Load past 6 months + all future data
-      const cutoff = new Date();
-      cutoff.setMonth(cutoff.getMonth() - 6);
-      const { data, error } = await sb
-        .from('schedules').select('*')
-        .eq('vessel_code', code)
-        .gte('eta', cutoff.toISOString())
-        .order('eta', { ascending: true })
-        .limit(1000);
-      if (error) {
-        console.error('schedule load error ' + code, error);
-        return;
+      // Page through the 1000-row PostgREST cap
+      const rows = [];
+      for (let page = 0; page < 20; page++) {
+        const { data, error } = await sb
+          .from('schedules').select('*')
+          .eq('vessel_code', code)
+          .gte('eta', cutoff)
+          .order('eta', { ascending: true })
+          .range(page * 1000, page * 1000 + 999);
+        if (error) {
+          console.error('schedule load error ' + code, error);
+          return;
+        }
+        if (!data || !data.length) break;
+        rows.push(...data);
+        if (data.length < 1000) break;
       }
-      if (data && data.length) map[code] = data;
+      if (rows.length) map[code] = rows;
     });
     await Promise.all(promises);
   }
@@ -771,6 +789,65 @@ async function loadScheduleFor(codes) {
   console.log('loadScheduleFor: loaded',
     total, 'rows for', Object.keys(map).length, 'vessels');
   return map;
+}
+
+// Pull the full archive (2024~) once, on demand
+async function ensureHistory() {
+  if (state.histLoaded || state.histLoading) return;
+  const codes = state.ships.map(s => s.code);
+  if (!codes.length) return;
+  state.histLoading = true;
+  render();
+  try {
+    // One fleet-wide query, 1000-row pages fetched in parallel
+    const { count, error: cErr } = await sb
+      .from('schedules')
+      .select('id', { count: 'exact', head: true })
+      .gte('eta', HISTORY_START);
+    if (cErr) throw cErr;
+    const pages = Math.ceil((count || 0) / 1000);
+    const t0 = performance.now();
+    const chunks = await Promise.all(
+      Array.from({ length: pages }, (_, i) =>
+        sb.from('schedules').select('*')
+          .gte('eta', HISTORY_START)
+          .order('eta', { ascending: true })
+          .range(i * 1000, i * 1000 + 999)
+      )
+    );
+    const map = {};
+    chunks.forEach(({ data, error }) => {
+      if (error) throw error;
+      (data || []).forEach(r => {
+        (map[r.vessel_code] = map[r.vessel_code] || [])
+          .push(r);
+      });
+    });
+    Object.assign(state.schedules, map);
+    state.histLoaded = true;
+    const total = Object.values(state.schedules)
+      .reduce((n, r) => n + r.length, 0);
+    console.log('ensureHistory: total rows', total,
+      'in', Math.round(performance.now() - t0), 'ms');
+  } catch (e) {
+    console.error('history load error', e);
+    showToast('과거 스케줄 로드 실패');
+  }
+  state.histLoading = false;
+  render();
+}
+
+// True when the requested date predates the default
+// 6-month window and the archive is not loaded yet
+function needsHistory(dateStr) {
+  if (!dateStr || state.histLoaded || state.histLoading) {
+    return false;
+  }
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d)) return false;
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 6);
+  return d < cutoff;
 }
 
 async function loadDocks() {
@@ -1832,6 +1909,10 @@ function renderScheduleTab(container) {
     });
     inp.addEventListener('change', e => {
       state[key] = e.target.value;
+      state.callLimit = 50;
+      if (needsHistory(e.target.value)) {
+        ensureHistory();
+      }
       renderScheduleBody();
     });
     box.appendChild(inp);
@@ -1918,6 +1999,28 @@ function renderScheduleBody() {
           + (q ? q + ' ' : '') + '기항 스케줄 (' + calls.length + '건)')
       );
 
+      if (state.histLoading) {
+        body.appendChild(
+          h('div', {style:{
+            background:'var(--card)',borderRadius:'12px',
+            border:'1px dashed #d0d6e0',padding:'12px',
+            textAlign:'center',fontSize:'12px',
+            color:'var(--muted)',marginBottom:'10px'
+          }}, '과거 스케줄 불러오는 중...')
+        );
+      } else if (!state.histLoaded) {
+        body.appendChild(
+          h('div', {style:{
+            background:'var(--card)',borderRadius:'12px',
+            border:'1px dashed #d0d6e0',padding:'10px',
+            textAlign:'center',fontSize:'12px',
+            color:'#7d8aa0',cursor:'pointer',
+            marginBottom:'10px',userSelect:'none'
+          }, onClick: () => ensureHistory()},
+            '⏱ 2024년부터 전체 기록 불러오기')
+        );
+      }
+
       if (!calls.length) {
         body.appendChild(
           h('div', {style:{
@@ -1928,7 +2031,7 @@ function renderScheduleBody() {
           }}, '해당 기간의 스케줄이 없습니다.')
         );
       } else {
-        calls.slice(0, 50).forEach(c => {
+        calls.slice(0, state.callLimit).forEach(c => {
           const eta = parseDate(c.eta);
           const etb = parseDate(c.etb);
           const etd = parseDate(c.etd);
@@ -1976,11 +2079,19 @@ function renderScheduleBody() {
             ])
           );
         });
-        if (calls.length > 50) {
+        if (calls.length > state.callLimit) {
           body.appendChild(
             h('div', {style:{textAlign:'center',fontSize:'12px',
-              color:'var(--muted)',padding:'10px'}},
-              '외 ' + (calls.length - 50) + '건 더...')
+              color:'#0064B4',fontWeight:'700',padding:'12px',
+              background:'var(--card)',borderRadius:'12px',
+              border:'1px solid var(--cardbr)',
+              cursor:'pointer',userSelect:'none'},
+              onClick: () => {
+                state.callLimit += 100;
+                renderScheduleBody();
+              }},
+              '더 보기 (남은 '
+              + (calls.length - state.callLimit) + '건)')
           );
         }
       }
@@ -2335,7 +2446,10 @@ function renderShipExpand(ship, schedule, color) {
       },
       onClick: () => {
         state.showPastVoy[code] = !showPast;
-        if (!showPast) state.voyTab[code] = 'cur';
+        if (!showPast) {
+          state.voyTab[code] = 'cur';
+          ensureHistory().then(renderScheduleBody);
+        }
         renderScheduleBody();
       }
     }, [
@@ -3109,6 +3223,7 @@ function renderPortTab(container) {
   onInputSafe(portInp, val => {
     state.portQuery = val;
     state.selectedPort = null;
+    state.searchLimit = 50;
     render();
   });
   portBox.appendChild(portInp);
@@ -3134,6 +3249,7 @@ function renderPortTab(container) {
   });
   onInputSafe(shipInp, val => {
     state.portShipQuery = val;
+    state.searchLimit = 50;
     render();
   });
   shipBox.appendChild(shipInp);
@@ -3188,12 +3304,70 @@ function renderPortTab(container) {
     );
   });
   header.appendChild(chips);
+
+  // Date range — picking a date pulls the archive on demand
+  const dateRow = h('div', {style:{
+    marginTop:'8px',display:'flex',
+    alignItems:'center',gap:'6px'
+  }});
+  const dateBox = (val, key, label) => {
+    const box = h('div', {style:{
+      flex:'1',display:'flex',alignItems:'center',
+      gap:'6px',
+      background:'rgba(255,255,255,.12)',
+      border:'1px solid rgba(255,255,255,.18)',
+      borderRadius:'11px',padding:'0 10px',
+      height:'38px'
+    }});
+    if (label) {
+      box.appendChild(
+        h('span', {style:{fontSize:'10px',
+          color:'#a9c8ee',flex:'0 0 auto'}}, label)
+      );
+    }
+    const inp = h('input', {
+      type: 'date', value: val,
+      style: {
+        flex:'1',minWidth:'0',border:'none',
+        background:'transparent',outline:'none',
+        color:'#fff',fontSize:'12px',
+        fontFamily:'Inter'
+      }
+    });
+    inp.addEventListener('change', e => {
+      state[key] = e.target.value;
+      state.searchLimit = 50;
+      if (needsHistory(e.target.value)) ensureHistory();
+      render();
+    });
+    box.appendChild(inp);
+    return box;
+  };
+  dateRow.appendChild(dateBox(state.dateFrom, 'dateFrom', '기간'));
+  dateRow.appendChild(
+    h('span', {style:{color:'#a9c8ee'}}, '~')
+  );
+  dateRow.appendChild(dateBox(state.dateTo, 'dateTo', ''));
+  if (state.dateFrom || state.dateTo) {
+    dateRow.appendChild(
+      h('span', {style:{
+        flex:'0 0 auto',color:'#cfe0f5',fontSize:'15px',
+        cursor:'pointer',padding:'0 4px',userSelect:'none'
+      }, onClick: () => {
+        state.dateFrom = ''; state.dateTo = '';
+        state.searchLimit = 50; render();
+      }}, '✕')
+    );
+  }
+  header.appendChild(dateRow);
+
   container.appendChild(header);
 
   // Body
   const body = h('div', {style:{padding:'16px'}});
 
-  if (state.portQuery || state.portShipQuery) {
+  if (state.portQuery || state.portShipQuery
+      || state.dateFrom || state.dateTo) {
     // Search — show matching port calls
     renderCombinedSearch(body);
   } else if (state.selectedPort) {
@@ -3261,12 +3435,51 @@ function renderCombinedSearch(body) {
     const eta = parseDate(r.eta);
     return eta && eta >= past14;
   });
+  const fromT = state.dateFrom
+    ? new Date(state.dateFrom + 'T00:00:00') : null;
+  const toT = state.dateTo
+    ? new Date(state.dateTo + 'T23:59:59') : null;
+  const ranged = !!(fromT || toT);
+  const rangeResults = ranged ? results.filter(r => {
+    const eta = parseDate(r.eta);
+    if (!eta) return false;
+    if (fromT && eta < fromT) return false;
+    if (toT && eta > toT) return false;
+    return true;
+  }) : results;
+
   const showPastSearch = state.showPastSearch || false;
-  const displayResults = showPastSearch
-    ? results : recentResults;
+  const displayResults = ranged
+    ? rangeResults
+    : (showPastSearch ? results : recentResults);
+
+  // Archive notice — shown whenever past data is in play
+  if (ranged || showPastSearch) {
+    if (state.histLoading) {
+      body.appendChild(
+        h('div', {style:{
+          background:'var(--card)',borderRadius:'12px',
+          border:'1px dashed #d0d6e0',padding:'12px',
+          textAlign:'center',fontSize:'12px',
+          color:'var(--muted)',marginBottom:'10px'
+        }}, '과거 스케줄 불러오는 중...')
+      );
+    } else if (!state.histLoaded) {
+      body.appendChild(
+        h('div', {style:{
+          background:'var(--card)',borderRadius:'12px',
+          border:'1px dashed #d0d6e0',padding:'10px',
+          textAlign:'center',fontSize:'12px',
+          color:'#7d8aa0',cursor:'pointer',
+          marginBottom:'10px',userSelect:'none'
+        }, onClick: () => ensureHistory()},
+          '⏱ 2024년부터 전체 기록 불러오기')
+      );
+    }
+  }
 
   // Past toggle button
-  if (pastResults.length > 0) {
+  if (!ranged && pastResults.length > 0) {
     body.appendChild(
       h('div', {
         style: {
@@ -3281,7 +3494,9 @@ function renderCombinedSearch(body) {
         },
         onClick: () => {
           state.showPastSearch = !showPastSearch;
-          render();
+          state.searchLimit = 50;
+          if (!state.showPastSearch) render();
+          else ensureHistory().then(render);
         }
       }, [
         h('span', {style: {fontSize: '10px'}},
@@ -3297,10 +3512,14 @@ function renderCombinedSearch(body) {
   body.appendChild(
     h('div', {className: 'section-label'},
       (sq || '전체') + (pq ? ' → ' + pq : '')
+      + (ranged
+        ? ' ' + (state.dateFrom || '…') + '~'
+          + (state.dateTo || '…')
+        : '')
       + ' 스케줄 (' + displayResults.length + '건)')
   );
 
-  if (!results.length) {
+  if (!displayResults.length) {
     body.appendChild(
       h('div', {style:{
         background:'var(--card)',borderRadius:'14px',
@@ -3313,7 +3532,7 @@ function renderCombinedSearch(body) {
   }
 
   let markedCurrent = false;
-  displayResults.slice(0, 50).forEach(c => {
+  displayResults.slice(0, state.searchLimit).forEach(c => {
     const eta = parseDate(c.eta);
     const etb = parseDate(c.etb);
     const etd = parseDate(c.etd);
@@ -3396,7 +3615,7 @@ function renderCombinedSearch(body) {
 
 
   // Auto-scroll to current schedule when past is toggled open
-  if (showPastSearch && pastResults.length > 0) {
+  if (!ranged && showPastSearch && pastResults.length > 0) {
     setTimeout(() => {
       const anchor = document.getElementById(
         'search-current-anchor');
@@ -3405,12 +3624,20 @@ function renderCombinedSearch(body) {
     }, 50);
   }
 
-  if (displayResults.length > 50) {
+  if (displayResults.length > state.searchLimit) {
     body.appendChild(
       h('div', {style:{
         textAlign:'center',fontSize:'12px',
-        color:'var(--muted)',padding:'10px'
-      }}, '외 ' + (displayResults.length - 50) + '건 더...')
+        color:'#0064B4',fontWeight:'700',padding:'12px',
+        background:'var(--card)',borderRadius:'12px',
+        border:'1px solid var(--cardbr)',
+        cursor:'pointer',userSelect:'none'
+      }, onClick: () => {
+        state.searchLimit += 100;
+        render();
+      }},
+        '더 보기 (남은 '
+        + (displayResults.length - state.searchLimit) + '건)')
     );
   }
 }
