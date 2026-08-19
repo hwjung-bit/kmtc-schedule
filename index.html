@@ -465,6 +465,112 @@ const SEARCH_ALIAS = {
   '제벨알리':'JEA','담맘':'DMM','카라치':'KHI',
 };
 
+// Terminal code -> berth-schedule page of that terminal
+// (URLs verified 2026-08-19)
+const TERMINAL_SITES = {
+  // Busan north port
+  'HBGT': 'https://custom.hktl.com/jsp/T01/sunsuk.jsp',
+  'HBCT': 'https://custom.hktl.com/jsp/T01/sunsuk.jsp',
+  'BPTS': 'https://info.bptc.co.kr/content/sw/frame/'
+    + 'berth_status_text_frame_sw_kr.jsp'
+    + '?p_id=BETX_SH_KR&snb_num=2&snb_div=service',
+  // Busan new port
+  'PNC': 'https://svc.pncport.com/info/CMS/Ship/'
+    + 'Info.pnc?mCode=MN014',
+  'HJNC': 'https://www.hjnc.co.kr/esvc/vessel/berthScheduleT',
+  'HPNT': 'https://www.hpnt.co.kr/infoservice/vessel/'
+    + 'vslScheduleList.jsp',
+  'BNCT': 'http://info.bnctkorea.com/esvc/vessel/'
+    + 'berthScheduleT',
+  'DGT': 'https://info.dgtbusan.com/DGT/esvc/vessel/'
+    + 'berthScheduleT',
+  'PNIT': 'https://www.pnitl.com/infoservice/vessel/'
+    + 'vslScheduleList.jsp',
+  'BCT': 'https://info.bct2-4.com/',
+  // Gwangyang
+  'KIT': 'https://info.kitl.com/jsp/T03/'
+    + 'bonsun.jsp?mainType=T03&subType=01',
+  'GWCT': 'http://www.gwct.co.kr/sub/sub_B2',
+  // Ulsan
+  'UNCT': 'http://www.unct.co.kr/eservice/#/ES010_100',
+  'JUCT': 'https://www.juct.co.kr/Service/01.asp?ui=4',
+  // Incheon
+  'SNCT': 'https://snct.sun-kwang.co.kr/infoservice/webpage/'
+    + 'vessel/vslScheduleText.jsp',
+  'ICT': 'https://scon.icpa.or.kr/vescall/'
+    + 'list.do?menuKey=19&searchTermCd=IT003',
+  'HJIT': 'https://scon.icpa.or.kr/vescall/'
+    + 'list.do?menuKey=19&searchTermCd=IT004',
+  'E1CT': 'https://scon.icpa.or.kr/vescall/'
+    + 'list.do?menuKey=19&searchTermCd=IT002',
+  // Pyeongtaek
+  'PCTC': 'http://www.pctc21.com/esvc/vessel/berthScheduleT',
+  'PDNT': 'http://www.pnct.co.kr/infoservice/index.html',
+  // Pohang
+  'KPOL': 'http://www.pohangport.com/info/'
+    + 'ShipBerthT.pict?MENU_SEQ=341&PAGE_SEQ=301&LANG=ko_KR',
+  // Daesan
+  'DSDB': 'https://ds.dongbang.co.kr/infoservice/index.html',
+};
+// BPT runs Sinseondae + Gamman off one info page
+TERMINAL_SITES['BPTG'] = TERMINAL_SITES['BPTS'];
+TERMINAL_SITES['BPT'] = TERMINAL_SITES['BPTS'];
+
+function copyToClipboard(txt) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(txt).catch(
+      () => fallbackCopy(txt));
+    return;
+  }
+  fallbackCopy(txt);
+}
+function fallbackCopy(txt) {
+  const ta = document.createElement('textarea');
+  ta.value = txt;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
+// Copy the full vessel name, then open the terminal site
+function openTerminalSite(tCode, vesselName) {
+  const url = TERMINAL_SITES[tCode];
+  if (!url) return;
+  if (vesselName) copyToClipboard(vesselName);
+  window.open(url, '_blank', 'noopener');
+  showToast(vesselName
+    ? '\u{1F4CB} ' + vesselName + ' 복사됨 — '
+      + tCode + ' 조회창에 붙여넣기'
+    : tCode + ' 선석배정 페이지 열림');
+}
+
+// Terminal code chip; clickable when the terminal site is known
+function terminalChip(tCode, vesselName, extraStyle) {
+  const url = TERMINAL_SITES[tCode];
+  const st = Object.assign({
+    fontSize:'10px',fontFamily:'Inter',
+    fontWeight:'700',color:'#0064B4',
+    background:'#e8f1fb',
+    padding:'1px 6px',borderRadius:'6px'
+  }, extraStyle || {});
+  if (url) {
+    st.cursor = 'pointer';
+    st.textDecoration = 'underline';
+  }
+  const attrs = {style: st};
+  if (url) {
+    attrs.title = tCode + ' 선석배정 조회 열기 (선명 복사)';
+    attrs.onClick = (e) => {
+      e.stopPropagation();
+      openTerminalSite(tCode, vesselName);
+    };
+  }
+  return h('span', attrs, tCode);
+}
+
 /**
  * Display port name: use port_code as primary identifier.
  * port_code comes directly from KMTC API (PUS, KAN, HKG, SIN etc.)
@@ -2054,11 +2160,10 @@ function renderScheduleBody() {
                   h('span', {style:{fontSize:'12px',
                     color:'var(--ink2)',fontWeight:'600'}},
                     portShort(c.port_name, c.port_code)),
-                  tCode ? h('span', {style:{
-                    fontSize:'9px',color:'#0064B4',
-                    background:'#e8f1fb',padding:'1px 5px',
-                    borderRadius:'5px',fontFamily:'Inter'
-                  }}, tCode) : null
+                  tCode ? terminalChip(tCode, c.shipName, {
+                    fontSize:'9px',padding:'1px 5px',
+                    borderRadius:'5px'
+                  }) : null
                 ]),
                 h('div', {style:{marginTop:'2px',
                   fontSize:'11px',color:'var(--ink3)'}},
@@ -2626,12 +2731,10 @@ function renderShipExpand(ship, schedule, color) {
 
       // Info
       const info = h('div', {className: 'port-info'});
-      let label = portShort(call.port_name, call.port_code);
-      if (call.terminal) {
-        // Show only terminal code (first word), not full name
-        const tCode = call.terminal.split(' ')[0];
-        if (tCode) label += ' (' + tCode + ')';
-      }
+      const label = portShort(call.port_name, call.port_code);
+      // Show only terminal code (first word), not full name
+      const tCode = call.terminal
+        ? call.terminal.split(' ')[0] : '';
       info.appendChild(
         h('span', {className: 'port-name',
           style: {
@@ -2646,6 +2749,12 @@ function renderShipExpand(ship, schedule, color) {
           }
         }, label)
       );
+      if (tCode) {
+        info.appendChild(terminalChip(tCode, ship.name, {
+          fontSize:'9px',padding:'0 5px',
+          borderRadius:'5px',marginLeft:'5px'
+        }));
+      }
       const times = h('div', {className: 'port-times'});
       times.appendChild(
         h('span', {className: 'port-time'},
@@ -3574,12 +3683,8 @@ function renderCombinedSearch(body) {
             h('span', {style:{fontSize:'11px',
               color:'var(--ink3)'}},
               portShort(c.port_name, c.port_code)),
-            tCode ? h('span', {style:{
-              fontSize:'10px',fontFamily:'Inter',
-              fontWeight:'700',color:'#0064B4',
-              background:'#e8f1fb',
-              padding:'1px 6px',borderRadius:'6px'
-            }}, tCode) : null,
+            tCode ? terminalChip(
+              tCode, ship ? ship.name : '') : null,
             h('span', {style:{
               fontSize:'9px',fontWeight:'700',
               color: badge.color,
