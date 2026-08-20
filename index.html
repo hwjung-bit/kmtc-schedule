@@ -574,14 +574,14 @@ function copyEsc(s) {
 }
 
 function copyTableHtml(rows) {
-  const head = ['선박', '항로', '항구', '터미널', '항차',
+  const head = ['선박', '항로', '항차', '항구', '터미널',
     'ETA', 'ETB', 'ETD']
     .map(t => '<th style="' + COPY_TH + '">' + t + '</th>')
     .join('');
   const body = rows.map(r => {
     const cells = [
-      r.ship, r.route || '-', r.port, r.terminal || '-',
-      r.voy, r.eta, r.etb, r.etd
+      r.ship, r.route || '-', r.voy,
+      r.port, r.terminal || '-', r.eta, r.etb, r.etd
     ].map(copyEsc);
     return '<tr>' + cells.map(
       c => '<td style="' + COPY_TD + '">' + c + '</td>'
@@ -598,9 +598,9 @@ function copyTableText(rows) {
   return rows.map(r =>
     r.ship
     + ' | 항로 ' + (r.route || '-')
+    + ' | 항차 ' + r.voy
     + ' | 항구 ' + r.port
     + ' | 터미널 ' + (r.terminal || '-')
-    + ' | 항차 ' + r.voy
     + ' | ETA ' + r.eta + ' | ETB ' + r.etb + ' | ETD ' + r.etd
   ).join('\n');
 }
