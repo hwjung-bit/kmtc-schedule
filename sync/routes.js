@@ -482,9 +482,20 @@ async function syncRoutes(sb, opts) {
 
   // ── 6. Keep the ship's standing route honest ──
   // `ships.route_key` drives the "투입 항로" badge and was hand-maintained, so
-  // it drifted. Set it to the route the vessel actually runs most often.
+  // it drifted. Set it to the route the vessel runs *now* — counting the
+  // whole archive would answer with whatever service it ran longest, which
+  // on a backfill means a route it left years ago.
+  const RECENT_FROM = Date.now() - 30 * 86400000;
+  const RECENT_TO = Date.now() + 120 * 86400000;
+  const recentVoy = new Set();
+  voyages.forEach((rows, vkey) => {
+    const t = new Date(rows[0].eta).getTime();
+    if (t >= RECENT_FROM && t <= RECENT_TO) recentVoy.add(vkey);
+  });
+
   const tally = new Map();
   out.forEach(r => {
+    if (!recentVoy.has(`${r.vessel_code}|${r.voyage_no}`)) return;
     if (!tally.has(r.vessel_code)) tally.set(r.vessel_code, new Map());
     const t = tally.get(r.vessel_code);
     t.set(r.route_cd, (t.get(r.route_cd) || 0) + 1);
