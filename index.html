@@ -574,18 +574,15 @@ function copyEsc(s) {
 }
 
 function copyTableHtml(rows) {
-  const head = ['선박', '항구', '항차', 'ETA', 'ETB', 'ETD']
+  const head = ['선박', '항로', '항구', '터미널', '항차',
+    'ETA', 'ETB', 'ETD']
     .map(t => '<th style="' + COPY_TH + '">' + t + '</th>')
     .join('');
   const body = rows.map(r => {
-    const sub = txt => '<br><span style="color:#5a6678;'
-      + 'font-size:12px">' + copyEsc(txt) + '</span>';
     const cells = [
-      copyEsc(r.ship) + (r.route ? sub(r.route) : ''),
-      copyEsc(r.port) + (r.terminal ? sub(r.terminal) : ''),
-      copyEsc(r.voy), copyEsc(r.eta),
-      copyEsc(r.etb), copyEsc(r.etd)
-    ];
+      r.ship, r.route || '-', r.port, r.terminal || '-',
+      r.voy, r.eta, r.etb, r.etd
+    ].map(copyEsc);
     return '<tr>' + cells.map(
       c => '<td style="' + COPY_TD + '">' + c + '</td>'
     ).join('') + '</tr>';
@@ -599,8 +596,10 @@ function copyTableHtml(rows) {
 
 function copyTableText(rows) {
   return rows.map(r =>
-    r.ship + (r.route ? ' · ' + r.route : '')
-    + ' | ' + r.port + (r.terminal ? '/' + r.terminal : '')
+    r.ship
+    + ' | 항로 ' + (r.route || '-')
+    + ' | 항구 ' + r.port
+    + ' | 터미널 ' + (r.terminal || '-')
     + ' | 항차 ' + r.voy
     + ' | ETA ' + r.eta + ' | ETB ' + r.etb + ' | ETD ' + r.etd
   ).join('\n');
