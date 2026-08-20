@@ -533,11 +533,15 @@ async function main() {
   } else if (mode === 'routes') {
     await syncRoutes(sb, {});
   } else if (mode === 'routes-backfill') {
-    // Walks the whole archive a slice at a time. Each pass skips voyages
-    // that already carry a route, so re-running it eventually covers
-    // everything without the per-run call cap ever being the limit.
+    // Whole archive in one pass. It needs ~3,300 leg searches, which at the
+    // module's 600ms spacing is roughly 35 minutes — inside the job timeout
+    // and gentler on ekmtc.com than several truncated passes would be.
+    // Neighbour labelling is off: over years of history a vessel changes
+    // service repeatedly, so guessing from an adjacent voyage is worse than
+    // leaving the call unlabelled.
     await syncRoutes(sb, {
-      backDays: 1200, aheadDays: 700, skipResolved: true
+      backDays: 1200, aheadDays: 700,
+      maxCalls: 4500, allowNeighbour: false, prune: true
     });
   } else {
     // Frequent run: only the voyages crews actually look at

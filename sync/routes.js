@@ -28,7 +28,10 @@ const SCHEDULE_FORM_API =
 const EKMTC_INTERVAL_MS = 600;
 const EKMTC_RETRIES = 2;
 // Backstop so a data anomaly can never turn into thousands of requests.
-const MAX_LEG_CALLS = 900;
+// The routine window needs ~600; a full-archive backfill needs ~3,300, and
+// at 600ms spacing that still finishes well inside the job timeout.
+const DEFAULT_MAX_LEG_CALLS = 900;
+let maxLegCalls = DEFAULT_MAX_LEG_CALLS;
 
 const HEADERS = {
   'Accept': 'application/json, text/plain, */*',
@@ -135,7 +138,7 @@ function normPort(p) {
 
 async function fetchLegRoutes(polCtr, polCd, podCtr, podCd,
   year, month, index) {
-  if (legCalls >= MAX_LEG_CALLS) return;
+  if (legCalls >= maxLegCalls) return;
   legCalls++;
   const body = await ekmtcGet(
     LEG_API + '?' + legParams(polCtr, polCd, podCtr, podCd, year, month));
@@ -171,12 +174,23 @@ async function fetchLegRoutes(polCtr, polCd, podCtr, podCd,
  *                          untouched history instead of redoing the same
  *                          months; the routine run leaves it off so a
  *                          re-scheduled voyage gets re-checked.
+ * @param opts.maxCalls     ceiling on leg-search requests for this run
+ * @param opts.allowNeighbour  label a voyage from the vessel's nearest other
+ *                          voyage when nothing else resolves. Fine over the
+ *                          routine window, where voyages sit weeks apart;
+ *                          wrong over years of archive, where a vessel has
+ *                          changed service several times. Backfill turns it
+ *                          off and leaves such voyages for a later pass.
  * @param opts.dryRun       log what would be written instead of writing
  */
 async function syncRoutes(sb, opts) {
   opts = opts || {};
   const backDays = opts.backDays || 45;
   const aheadDays = opts.aheadDays || 150;
+  const allowNeighbour = opts.allowNeighbour !== false;
+  maxLegCalls = opts.maxCalls || DEFAULT_MAX_LEG_CALLS;
+  legCalls = 0;
+  legFailures = 0;
   console.log(`=== ROUTE SYNC START (-${backDays}d..+${aheadDays}d` +
     `${opts.skipResolved ? ', skipping resolved' : ''}) ===`);
 
@@ -299,6 +313,7 @@ async function syncRoutes(sb, opts) {
   // ── 3. Ask ekmtc.com about each distinct pair-month ──
   const index = new Map();
   let done = 0;
+  let truncated = false;
   for (const q of queries.values()) {
     await fetchLegRoutes(q[0], q[1], q[2], q[3], q[4], q[5], index);
     done++;
@@ -306,9 +321,10 @@ async function syncRoutes(sb, opts) {
       console.log(`  leg queries ${done}/${queries.size}, ` +
         `${index.size} legs indexed`);
     }
-    if (legCalls >= MAX_LEG_CALLS) {
-      console.error(`leg call cap (${MAX_LEG_CALLS}) reached — ` +
+    if (legCalls >= maxLegCalls) {
+      console.error(`leg call cap (${maxLegCalls}) reached — ` +
         `${queries.size - done} queries skipped this run`);
+      truncated = true;
       break;
     }
   }
@@ -379,7 +395,7 @@ async function syncRoutes(sb, opts) {
       // (b) opposite bound of the same voyage number
       fallback = byStem.get(`${vessel}|${voyStem(voyage)}`) || null;
       source = 'stem';
-      if (!fallback) {
+      if (!fallback && allowNeighbour) {
         // (c) whichever voyage of this vessel sails closest in time
         const list = byVessel.get(vessel) || [];
         const t = new Date(rows[0].eta).getTime();
@@ -437,12 +453,31 @@ async function syncRoutes(sb, opts) {
     console.log(`collapsed ${out.length - rows.length} repeat port calls`);
   }
 
+  let writeFailed = false;
   for (let i = 0; i < rows.length; i += 500) {
     const { error } = await sb
       .from('voyage_routes')
       .upsert(rows.slice(i, i + 500),
         { onConflict: 'vessel_code,voyage_no,port_code' });
-    if (error) console.error('voyage_routes upsert error:', error.message);
+    if (error) {
+      writeFailed = true;
+      console.error('voyage_routes upsert error:', error.message);
+    }
+  }
+
+  // Every row this run stands behind carries `stamp`. Anything older is a
+  // label an earlier run left that this run could not reproduce — drop it
+  // rather than let a stale guess sit there. Only safe after a pass that
+  // actually completed, so a truncated or half-written run leaves it alone.
+  if (opts.prune) {
+    if (truncated || writeFailed) {
+      console.log('prune skipped — run was truncated or a write failed');
+    } else {
+      const { error } = await sb
+        .from('voyage_routes').delete().lt('updated_at', stamp);
+      if (error) console.error('voyage_routes prune error:', error.message);
+      else console.log('pruned labels this run could not reproduce');
+    }
   }
 
   // ── 6. Keep the ship's standing route honest ──
