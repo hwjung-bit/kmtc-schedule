@@ -2094,7 +2094,8 @@ function renderScheduleBody() {
           if (!eta) return;
           if (fromT && eta < fromT) return;
           if (toT && eta > toT) return;
-          calls.push({ ...r, vessel_code: ship.code, shipName: ship.name });
+          calls.push({ ...r, vessel_code: ship.code,
+            shipName: ship.name, route: ship.route_key || '' });
         });
       });
       calls.sort((a, b) => new Date(a.eta) - new Date(b.eta));
@@ -2167,7 +2168,8 @@ function renderScheduleBody() {
                 ]),
                 h('div', {style:{marginTop:'2px',
                   fontSize:'11px',color:'var(--ink3)'}},
-                  (c.voyage_no || '') + ' · ' + (c.shipName || ''))
+                  '항차 ' + (c.voyage_no || '-')
+                  + (c.route ? ' · ' + c.route : ''))
               ]),
               h('div', {style:{flex:'0 0 auto',
                 textAlign:'right',fontFamily:'Inter'}}, [
@@ -3695,7 +3697,8 @@ function renderCombinedSearch(body) {
           h('div', {style:{marginTop:'2px',
             fontSize:'11px',color:'var(--ink3)'}},
             '항차 ' + (c.voyage_no || '-')
-            + (ship ? ' · ' + (ship.name || '') : ''))
+            + (ship && ship.route_key
+              ? ' · ' + ship.route_key : ''))
         ]),
         h('div', {style:{flex:'0 0 auto',
           textAlign:'right',fontFamily:'Inter'}}, [
