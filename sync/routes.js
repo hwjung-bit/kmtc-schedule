@@ -163,15 +163,22 @@ async function fetchLegRoutes(polCtr, polCd, podCtr, podCd,
  * Reads the port calls we already hold, resolves a service route for each,
  * and upserts them into `voyage_routes`.
  *
- * @param sb        Supabase client
- * @param opts.days how far ahead/back to cover (default: -45..+150 days)
- * @param opts.dryRun  log what would be written instead of writing
+ * @param sb                Supabase client
+ * @param opts.backDays     how far back to cover (default 45)
+ * @param opts.aheadDays    how far ahead to cover (default 150)
+ * @param opts.skipResolved leave voyages that already carry a route alone.
+ *                          Backfill runs set this so each pass advances into
+ *                          untouched history instead of redoing the same
+ *                          months; the routine run leaves it off so a
+ *                          re-scheduled voyage gets re-checked.
+ * @param opts.dryRun       log what would be written instead of writing
  */
 async function syncRoutes(sb, opts) {
   opts = opts || {};
   const backDays = opts.backDays || 45;
   const aheadDays = opts.aheadDays || 150;
-  console.log(`=== ROUTE SYNC START (-${backDays}d..+${aheadDays}d) ===`);
+  console.log(`=== ROUTE SYNC START (-${backDays}d..+${aheadDays}d` +
+    `${opts.skipResolved ? ', skipping resolved' : ''}) ===`);
 
   const from = new Date(Date.now() - backDays * 86400000)
     .toISOString().split('T')[0];
@@ -222,8 +229,30 @@ async function syncRoutes(sb, opts) {
     .select('vessel_code,voyage_no,port_code,eta,etd')
     .in('voyage_no', wantNos));
   if (!raw) return;
-  const calls = raw.filter(
+  let calls = raw.filter(
     r => wantVoy.has(`${r.vessel_code}|${r.voyage_no}`));
+
+  if (opts.skipResolved) {
+    const known = new Set();
+    for (let offset = 0; ; offset += PAGE) {
+      const { data, error } = await sb
+        .from('voyage_routes')
+        .select('vessel_code,voyage_no')
+        .range(offset, offset + PAGE - 1);
+      if (error) {
+        console.error('voyage_routes read error:', error.message);
+        break;
+      }
+      if (!data || !data.length) break;
+      data.forEach(r => known.add(`${r.vessel_code}|${r.voyage_no}`));
+      if (data.length < PAGE) break;
+    }
+    const before = calls.length;
+    calls = calls.filter(
+      r => !known.has(`${r.vessel_code}|${r.voyage_no}`));
+    console.log(`already resolved: ${known.size} voyages, ` +
+      `skipped ${before - calls.length} port calls`);
+  }
   console.log(`port calls (whole voyages): ${calls.length}`);
   if (!calls.length) return;
 

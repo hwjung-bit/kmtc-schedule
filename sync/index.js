@@ -532,6 +532,13 @@ async function main() {
     await syncRoutes(sb, {});
   } else if (mode === 'routes') {
     await syncRoutes(sb, {});
+  } else if (mode === 'routes-backfill') {
+    // Walks the whole archive a slice at a time. Each pass skips voyages
+    // that already carry a route, so re-running it eventually covers
+    // everything without the per-run call cap ever being the limit.
+    await syncRoutes(sb, {
+      backDays: 1200, aheadDays: 700, skipResolved: true
+    });
   } else {
     // Frequent run: only the voyages crews actually look at
     await syncSchedules({ discover: false, aheadDays: 30 });

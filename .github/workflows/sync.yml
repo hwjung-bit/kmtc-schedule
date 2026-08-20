@@ -19,6 +19,7 @@ on:
           - full
           - single
           - routes
+          - routes-backfill
       vessel_code:
         description: 'Vessel code (for single mode only)'
         required: false
