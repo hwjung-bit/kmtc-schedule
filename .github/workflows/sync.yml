@@ -18,6 +18,7 @@ on:
           - daily
           - full
           - single
+          - routes
       vessel_code:
         description: 'Vessel code (for single mode only)'
         required: false

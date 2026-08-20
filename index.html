@@ -741,6 +741,7 @@ const state = {
   // Data
   ships: [],        // from ships table
   schedules: {},    // vessel_code -> rows
+  routes: {},       // 'vessel|voyage|port' -> {cd, nm}
   docks: [],        // from docks table
   favorites: { ship: [], port: [] },
   hiddenShips: [],
@@ -895,6 +896,48 @@ async function loadScheduleFor(codes, sinceISO) {
   console.log('loadScheduleFor: loaded',
     total, 'rows for', Object.keys(map).length, 'vessels');
   return map;
+}
+
+// Service route per port call. The KMTC gateway has no route field, so the
+// sync fills `voyage_routes` from ekmtc.com's leg search; a voyage that
+// switches service mid-rotation therefore differs port by port.
+async function loadRoutes() {
+  const map = {};
+  for (let page = 0; page < 30; page++) {
+    const { data, error } = await sb
+      .from('voyage_routes')
+      .select('vessel_code,voyage_no,port_code,route_cd,route_nm')
+      .range(page * 1000, page * 1000 + 999);
+    if (error) {
+      console.error('route load error', error);
+      break;
+    }
+    if (!data || !data.length) break;
+    data.forEach(r => {
+      map[r.vessel_code + '|' + r.voyage_no + '|' + r.port_code] = {
+        cd: r.route_cd || '', nm: r.route_nm || ''
+      };
+    });
+    if (data.length < 1000) break;
+  }
+  console.log('loadRoutes:', Object.keys(map).length, 'port calls');
+  return map;
+}
+
+// Route shown for one port call. Falls back to the ship's standing route
+// so a call the leg search did not cover still shows something.
+function routeOf(row, ship) {
+  const hit = state.routes[
+    row.vessel_code + '|' + row.voyage_no + '|' + row.port_code];
+  if (hit && hit.cd) return hit.cd;
+  if (ship && ship.route_key) return ship.route_key;
+  return '';
+}
+
+function routeNameOf(row) {
+  const hit = state.routes[
+    row.vessel_code + '|' + row.voyage_no + '|' + row.port_code];
+  return (hit && hit.nm) || '';
 }
 
 // Pull the full archive (2024~) once, on demand
@@ -2095,7 +2138,7 @@ function renderScheduleBody() {
           if (fromT && eta < fromT) return;
           if (toT && eta > toT) return;
           calls.push({ ...r, vessel_code: ship.code,
-            shipName: ship.name, route: ship.route_key || '' });
+            shipName: ship.name, route: routeOf(r, ship) });
         });
       });
       calls.sort((a, b) => new Date(a.eta) - new Date(b.eta));
@@ -3697,8 +3740,7 @@ function renderCombinedSearch(body) {
           h('div', {style:{marginTop:'2px',
             fontSize:'11px',color:'var(--ink3)'}},
             '항차 ' + (c.voyage_no || '-')
-            + (ship && ship.route_key
-              ? ' · ' + ship.route_key : ''))
+            + (routeOf(c, ship) ? ' · ' + routeOf(c, ship) : ''))
         ]),
         h('div', {style:{flex:'0 0 auto',
           textAlign:'right',fontFamily:'Inter'}}, [
@@ -4097,8 +4139,7 @@ function renderPortDetail(body) {
             h('div', {style:{marginTop:'2px',
               fontSize:'11px',color:'var(--ink3)'}},
               '항차 ' + (c.voyage_no || '-')
-              + (ship ? ' \xB7 '
-                + (ship.route_key || '') : ''))
+              + (routeOf(c, ship) ? ' · ' + routeOf(c, ship) : ''))
           ]),
           h('div', {style:{flex:'0 0 auto',
             textAlign:'right',fontFamily:'Inter'}}, [
@@ -5587,13 +5628,15 @@ async function initAppData() {
 
     // Load favorites, docks, config in parallel
     const email = state.user ? state.user.email : null;
-    const [favs, docks, config] = await Promise.all([
+    const [favs, docks, config, routes] = await Promise.all([
       loadFavorites(email),
       loadDocks(),
-      loadConfig()
+      loadConfig(),
+      loadRoutes()
     ]);
     state.favorites = favs;
     state.docks = docks;
+    state.routes = routes;
     if (config.last_update) {
       state.lastUpdate = config.last_update;
     } else {

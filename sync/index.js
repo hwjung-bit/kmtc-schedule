@@ -4,6 +4,7 @@
 // =============================================================================
 
 const { createClient } = require('@supabase/supabase-js');
+const { syncRoutes } = require('./routes.js');
 
 const KMTC_API = process.env.KMTC_API_URL;
 const KMTC_KEY = process.env.KMTC_API_KEY;
@@ -522,11 +523,15 @@ async function main() {
 
   if (mode === 'full') {
     await initFullFetch();
+    await syncRoutes(sb, {});
   } else if (mode === 'single' && vesselCode) {
     await fetchSingleVessel(vesselCode);
   } else if (mode === 'daily') {
     // Once a day: look for new voyages and refresh the wide horizon
     await syncSchedules({ discover: true, aheadDays: 90 });
+    await syncRoutes(sb, {});
+  } else if (mode === 'routes') {
+    await syncRoutes(sb, {});
   } else {
     // Frequent run: only the voyages crews actually look at
     await syncSchedules({ discover: false, aheadDays: 30 });
