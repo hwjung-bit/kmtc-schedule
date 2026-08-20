@@ -924,14 +924,13 @@ async function loadRoutes() {
   return map;
 }
 
-// Route shown for one port call. Falls back to the ship's standing route
-// so a call the leg search did not cover still shows something.
-function routeOf(row, ship) {
+// Route shown for one port call. Deliberately has no fallback: showing the
+// ship's standing route for a call the sync could not resolve made one
+// vessel look like it ran two different services.
+function routeOf(row) {
   const hit = state.routes[
     row.vessel_code + '|' + row.voyage_no + '|' + row.port_code];
-  if (hit && hit.cd) return hit.cd;
-  if (ship && ship.route_key) return ship.route_key;
-  return '';
+  return (hit && hit.cd) || '';
 }
 
 function routeNameOf(row) {
@@ -2138,7 +2137,7 @@ function renderScheduleBody() {
           if (fromT && eta < fromT) return;
           if (toT && eta > toT) return;
           calls.push({ ...r, vessel_code: ship.code,
-            shipName: ship.name, route: routeOf(r, ship) });
+            shipName: ship.name, route: routeOf(r) });
         });
       });
       calls.sort((a, b) => new Date(a.eta) - new Date(b.eta));
@@ -3740,7 +3739,7 @@ function renderCombinedSearch(body) {
           h('div', {style:{marginTop:'2px',
             fontSize:'11px',color:'var(--ink3)'}},
             '항차 ' + (c.voyage_no || '-')
-            + (routeOf(c, ship) ? ' · ' + routeOf(c, ship) : ''))
+            + (routeOf(c) ? ' · ' + routeOf(c) : ''))
         ]),
         h('div', {style:{flex:'0 0 auto',
           textAlign:'right',fontFamily:'Inter'}}, [
@@ -4139,7 +4138,7 @@ function renderPortDetail(body) {
             h('div', {style:{marginTop:'2px',
               fontSize:'11px',color:'var(--ink3)'}},
               '항차 ' + (c.voyage_no || '-')
-              + (routeOf(c, ship) ? ' · ' + routeOf(c, ship) : ''))
+              + (routeOf(c) ? ' · ' + routeOf(c) : ''))
           ]),
           h('div', {style:{flex:'0 0 auto',
             textAlign:'right',fontFamily:'Inter'}}, [
