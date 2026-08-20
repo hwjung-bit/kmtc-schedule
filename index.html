@@ -535,6 +535,133 @@ function fallbackCopy(txt) {
   document.body.removeChild(ta);
 }
 
+/* ===== SCHEDULE COPY (mail-friendly table) ===== */
+function fmtCopyTime(d) {
+  if (!d || isNaN(d)) return '-';
+  return String(d.getMonth() + 1).padStart(2, '0') + '/'
+    + String(d.getDate()).padStart(2, '0') + ' '
+    + String(d.getHours()).padStart(2, '0') + ':'
+    + String(d.getMinutes()).padStart(2, '0');
+}
+
+// Normalize one schedule record into the fields the table shows
+function copyRowOf(c) {
+  const ship = state.ships.find(s => s.code === c.vessel_code);
+  const tCode = c.terminal ? c.terminal.split(' ')[0] : '';
+  const name = (ship && ship.name) ? ship.name : (c.shipName || '');
+  return {
+    ship: name ? name + ' (' + c.vessel_code + ')'
+      : (c.vessel_code || '-'),
+    route: routeOf(c) || (ship && ship.route_key) || '',
+    port: portShort(c.port_name, c.port_code) || '-',
+    terminal: tCode,
+    voy: c.voyage_no || '-',
+    eta: fmtCopyTime(parseDate(c.eta)),
+    etb: fmtCopyTime(parseDate(c.etb)),
+    etd: fmtCopyTime(parseDate(c.etd))
+  };
+}
+
+// Inline styles only — Gmail/Outlook drop <style> blocks
+const COPY_TD = 'border:1px solid #c4ccd8;padding:6px 10px;'
+  + 'text-align:left;vertical-align:top;';
+const COPY_TH = COPY_TD
+  + 'background:#eef2f7;font-weight:700;white-space:nowrap;';
+
+function copyEsc(s) {
+  return String(s).replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function copyTableHtml(rows) {
+  const head = ['선박', '항구', '항차', 'ETA', 'ETB', 'ETD']
+    .map(t => '<th style="' + COPY_TH + '">' + t + '</th>')
+    .join('');
+  const body = rows.map(r => {
+    const sub = txt => '<br><span style="color:#5a6678;'
+      + 'font-size:12px">' + copyEsc(txt) + '</span>';
+    const cells = [
+      copyEsc(r.ship) + (r.route ? sub(r.route) : ''),
+      copyEsc(r.port) + (r.terminal ? sub(r.terminal) : ''),
+      copyEsc(r.voy), copyEsc(r.eta),
+      copyEsc(r.etb), copyEsc(r.etd)
+    ];
+    return '<tr>' + cells.map(
+      c => '<td style="' + COPY_TD + '">' + c + '</td>'
+    ).join('') + '</tr>';
+  }).join('');
+  return '<table style="border-collapse:collapse;'
+    + 'font-family:Malgun Gothic,sans-serif;'
+    + 'font-size:13px;color:#1a2432">'
+    + '<thead><tr>' + head + '</tr></thead>'
+    + '<tbody>' + body + '</tbody></table>';
+}
+
+function copyTableText(rows) {
+  return rows.map(r =>
+    r.ship + (r.route ? ' · ' + r.route : '')
+    + ' | ' + r.port + (r.terminal ? '/' + r.terminal : '')
+    + ' | 항차 ' + r.voy
+    + ' | ETA ' + r.eta + ' | ETB ' + r.etb + ' | ETD ' + r.etd
+  ).join('\n');
+}
+
+// Put HTML and plain text on the clipboard together
+function copyRich(html, text) {
+  if (navigator.clipboard && window.ClipboardItem
+      && window.isSecureContext) {
+    try {
+      const item = new ClipboardItem({
+        'text/html': new Blob([html], {type: 'text/html'}),
+        'text/plain': new Blob([text], {type: 'text/plain'})
+      });
+      navigator.clipboard.write([item])
+        .catch(() => richFallbackCopy(html, text));
+      return;
+    } catch (e) { /* fall through */ }
+  }
+  richFallbackCopy(html, text);
+}
+
+function richFallbackCopy(html, text) {
+  const div = document.createElement('div');
+  div.setAttribute('contenteditable', 'true');
+  div.innerHTML = html;
+  div.style.position = 'fixed';
+  div.style.left = '-9999px';
+  div.style.top = '0';
+  document.body.appendChild(div);
+  const range = document.createRange();
+  range.selectNodeContents(div);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  sel.removeAllRanges();
+  document.body.removeChild(div);
+  if (!ok) fallbackCopy(text);
+}
+
+// Clipboard button for one port call — pastes as a table
+function copyCallBtn(call) {
+  return h('span', {
+    title: '이 스케줄 복사 (메일 붙여넣기용 표)',
+    style: {
+      flex: '0 0 auto', cursor: 'pointer', fontSize: '14px',
+      lineHeight: '1', padding: '6px 2px', opacity: '0.55',
+      userSelect: 'none'
+    },
+    onClick: (e) => {
+      e.stopPropagation();
+      const rows = [copyRowOf(call)];
+      copyRich(copyTableHtml(rows), copyTableText(rows));
+      showToast('\u{1F4CB} ' + rows[0].ship
+        + ' 스케줄 복사됨 — 메일에 붙여넣기');
+    }
+  }, '\u{1F4CB}');
+}
+
 // Copy the full vessel name, then open the terminal site
 function openTerminalSite(tCode, vesselName) {
   const url = TERMINAL_SITES[tCode];
@@ -2224,7 +2351,8 @@ function renderScheduleBody() {
                 h('div', {style:{fontSize:'11px',
                   color:'#c25d00',fontWeight:'700',marginTop:'1px'}},
                   'ETD ' + (etd ? fmtShort(etd) : '-'))
-              ])
+              ]),
+              copyCallBtn(c)
             ])
           );
         });
@@ -3757,7 +3885,8 @@ function renderCombinedSearch(body) {
             fontWeight:'700',
             marginTop:'1px'}},
             'ETD ' + (etd ? fmtShort(etd) : '-'))
-        ])
+        ]),
+        copyCallBtn(c)
       ]);
     body.appendChild(card);
   });
@@ -4153,7 +4282,8 @@ function renderPortDetail(body) {
               color:'#c25d00',fontWeight:'700',
               marginTop:'1px'}},
               'ETD ' + (etd ? fmtShort(etd) : '-'))
-          ])
+          ]),
+          copyCallBtn(c)
         ])
       );
     });
