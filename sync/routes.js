@@ -394,10 +394,24 @@ async function syncRoutes(sb, opts) {
   }
 
   // ── 5. Write ──
-  for (let i = 0; i < out.length; i += 500) {
+  // A rotation can touch the same port twice (out and back through Busan),
+  // which collides on the primary key. Postgres rejects a whole upsert batch
+  // that carries the key twice, so collapse to the first call — both calls
+  // sail the same service anyway.
+  const unique = new Map();
+  out.forEach(r => {
+    const k = `${r.vessel_code}|${r.voyage_no}|${r.port_code}`;
+    if (!unique.has(k)) unique.set(k, r);
+  });
+  const rows = [...unique.values()];
+  if (rows.length !== out.length) {
+    console.log(`collapsed ${out.length - rows.length} repeat port calls`);
+  }
+
+  for (let i = 0; i < rows.length; i += 500) {
     const { error } = await sb
       .from('voyage_routes')
-      .upsert(out.slice(i, i + 500),
+      .upsert(rows.slice(i, i + 500),
         { onConflict: 'vessel_code,voyage_no,port_code' });
     if (error) console.error('voyage_routes upsert error:', error.message);
   }
