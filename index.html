@@ -535,72 +535,91 @@ function fallbackCopy(txt) {
   document.body.removeChild(ta);
 }
 
-/* ===== SCHEDULE COPY (mail-friendly table) ===== */
-function fmtCopyTime(d) {
-  if (!d || isNaN(d)) return '-';
-  return String(d.getMonth() + 1).padStart(2, '0') + '/'
-    + String(d.getDate()).padStart(2, '0') + ' '
-    + String(d.getHours()).padStart(2, '0') + ':'
-    + String(d.getMinutes()).padStart(2, '0');
-}
-
-// Normalize one schedule record into the fields the table shows
+/* ===== SCHEDULE COPY (mail-friendly card) ===== */
+// Normalize one schedule record into the fields the card shows
 function copyRowOf(c) {
   const ship = state.ships.find(s => s.code === c.vessel_code);
   const tCode = c.terminal ? c.terminal.split(' ')[0] : '';
-  const name = (ship && ship.name) ? ship.name : (c.shipName || '');
+  const eta = parseDate(c.eta);
+  const etd = parseDate(c.etd);
+  const now = new Date();
+  const status = (etd && etd < now)
+    ? { text: '완료', bg: '#eef1f6', color: '#97a2b5' }
+    : (eta && eta <= now && etd && etd >= now)
+      ? { text: '접안중', bg: '#e8f1fb', color: '#0064B4' }
+      : { text: '예정', bg: '#e6f4ea', color: '#1b7a3d' };
   return {
-    ship: name ? name + ' (' + c.vessel_code + ')'
-      : (c.vessel_code || '-'),
+    code: c.vessel_code || '-',
+    name: (ship && ship.name) ? ship.name : (c.shipName || ''),
     route: routeOf(c) || (ship && ship.route_key) || '',
     port: portShort(c.port_name, c.port_code) || '-',
     terminal: tCode,
     voy: c.voyage_no || '-',
-    eta: fmtCopyTime(parseDate(c.eta)),
-    etb: fmtCopyTime(parseDate(c.etb)),
-    etd: fmtCopyTime(parseDate(c.etd))
+    status: status,
+    eta: fmtShort(eta),
+    etb: fmtShort(parseDate(c.etb)),
+    etd: fmtShort(etd)
   };
 }
 
 // Inline styles only — Gmail/Outlook drop <style> blocks
-const COPY_TD = 'border:1px solid #c4ccd8;padding:6px 10px;'
-  + 'text-align:left;vertical-align:top;';
-const COPY_TH = COPY_TD
-  + 'background:#eef2f7;font-weight:700;white-space:nowrap;';
-
 function copyEsc(s) {
   return String(s).replace(/&/g, '&amp;')
     .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function copyTableHtml(rows) {
-  const head = ['선박', '항로', '항차', '항구', '터미널',
-    'ETA', 'ETB', 'ETD']
-    .map(t => '<th style="' + COPY_TH + '">' + t + '</th>')
-    .join('');
-  const body = rows.map(r => {
-    const cells = [
-      r.ship, r.route || '-', r.voy,
-      r.port, r.terminal || '-', r.eta, r.etb, r.etd
-    ].map(copyEsc);
-    return '<tr>' + cells.map(
-      c => '<td style="' + COPY_TD + '">' + c + '</td>'
-    ).join('') + '</tr>';
+// Rebuild the on-screen card with table markup — mail clients drop the
+// flex layout the real card uses and collapse it into one column
+function copyCardHtml(rows) {
+  const pill = (txt, color, bg) =>
+    '<span style="display:inline-block;font-family:Inter,'
+    + 'Malgun Gothic,sans-serif;font-size:9px;font-weight:700;'
+    + 'color:' + color + ';background:' + bg + ';'
+    + 'padding:1px 6px;border-radius:6px">'
+    + copyEsc(txt) + '</span>';
+  const time = (label, val, color) =>
+    '<div style="font-family:Inter,Malgun Gothic,sans-serif;'
+    + 'font-size:11.5px;font-weight:700;color:' + color + ';'
+    + 'white-space:nowrap;line-height:1.45">'
+    + label + ' ' + copyEsc(val) + '</div>';
+
+  return rows.map(r => {
+    const head = '<span style="font-family:Inter,Malgun Gothic,'
+      + 'sans-serif;font-size:15px;font-weight:800;color:#10233f">'
+      + copyEsc(r.code) + '</span>'
+      + '<span style="font-size:11px;color:#6b7891">&nbsp;&nbsp;'
+      + copyEsc(r.name) + '&nbsp;&nbsp;</span>'
+      + '<span style="font-size:11px;color:#6b7891">'
+      + copyEsc(r.port) + '&nbsp;&nbsp;</span>'
+      + (r.terminal ? pill(r.terminal, '#0064B4', '#e8f1fb')
+        + '&nbsp;&nbsp;' : '')
+      + pill(r.status.text, r.status.color, r.status.bg);
+    const sub = '<div style="margin-top:3px;font-size:11px;'
+      + 'color:#6b7891">항차 ' + copyEsc(r.voy)
+      + (r.route ? ' · 항로 ' + copyEsc(r.route) : '') + '</div>';
+    return '<table cellpadding="0" cellspacing="0" border="0" '
+      + 'style="border-collapse:separate;border-spacing:0;'
+      + 'width:470px;background:#ffffff;border:1px solid #e6eaf1;'
+      + 'border-radius:14px;font-family:Malgun Gothic,sans-serif;'
+      + 'margin-bottom:8px"><tr>'
+      + '<td style="padding:10px 14px;vertical-align:middle">'
+      + head + sub + '</td>'
+      + '<td style="padding:10px 14px;vertical-align:middle;'
+      + 'text-align:right;white-space:nowrap">'
+      + time('ETA', r.eta, '#2e7d32')
+      + time('ETB', r.etb, '#0064B4')
+      + time('ETD', r.etd, '#c25d00')
+      + '</td></tr></table>';
   }).join('');
-  return '<table style="border-collapse:collapse;'
-    + 'font-family:Malgun Gothic,sans-serif;'
-    + 'font-size:13px;color:#1a2432">'
-    + '<thead><tr>' + head + '</tr></thead>'
-    + '<tbody>' + body + '</tbody></table>';
 }
 
 function copyTableText(rows) {
   return rows.map(r =>
-    r.ship
-    + ' | 항로 ' + (r.route || '-')
+    r.code + (r.name ? ' ' + r.name : '')
     + ' | 항차 ' + r.voy
+    + (r.route ? ' | 항로 ' + r.route : '')
     + ' | 항구 ' + r.port
-    + ' | 터미널 ' + (r.terminal || '-')
+    + (r.terminal ? ' | 터미널 ' + r.terminal : '')
     + ' | ETA ' + r.eta + ' | ETB ' + r.etb + ' | ETD ' + r.etd
   ).join('\n');
 }
@@ -654,8 +673,8 @@ function copyCallBtn(call) {
     onClick: (e) => {
       e.stopPropagation();
       const rows = [copyRowOf(call)];
-      copyRich(copyTableHtml(rows), copyTableText(rows));
-      showToast('\u{1F4CB} ' + rows[0].ship
+      copyRich(copyCardHtml(rows), copyTableText(rows));
+      showToast('\u{1F4CB} ' + rows[0].code
         + ' 스케줄 복사됨 — 메일에 붙여넣기');
     }
   }, '\u{1F4CB}');
