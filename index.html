@@ -511,10 +511,32 @@ const TERMINAL_SITES = {
     + 'ShipBerthT.pict?MENU_SEQ=341&PAGE_SEQ=301&LANG=ko_KR',
   // Daesan
   'DSDB': 'https://ds.dongbang.co.kr/infoservice/index.html',
+  // --- Overseas terminals (URLs verified 2026-08-24) ---
+  // Hong Kong
+  'HIT': 'https://cplus.hit.com.hk/frontpage/',
+  // Ho Chi Minh
+  'CATL': 'https://eport.saigonnewport.com.vn/Ships',
+  // Laem Chabang
+  'LCB1': 'https://www.lcb1.com/BerthSchedule',
+  // Port Klang (Northport)
+  'NPCT': 'https://apps.northport.com.my/e-NP2/index.php',
+  // Karachi
+  'SAPT': 'https://sapt.com.pk/Enquiries?is=VesselSchedule',
+  // Jakarta
+  'UTC1': 'https://www.jict.co.id/vessel-schedule',
+  // Nhava Sheva
+  'BMCT': 'https://www.bmct.co.in/vessel-schedule',
+  // Colombo
+  'SAGT': 'https://www.sagt.com.lk/vessel-schedule.html',
 };
 // BPT runs Sinseondae + Gamman off one info page
 TERMINAL_SITES['BPTG'] = TERMINAL_SITES['BPTS'];
 TERMINAL_SITES['BPT'] = TERMINAL_SITES['BPTS'];
+// Taiwan Port NET covers Keelung / Taichung / Kaohsiung berths
+const TW_PORT_NET = 'https://tpnet.twport.com.tw/IFAWeb/Function'
+  + '?_RedirUrl=/IFAWeb/Board/ShipWharfAllStatus';
+['ULIC', 'KHB', 'TXCC', 'KH63', 'YMCT'].forEach(
+  (c) => { TERMINAL_SITES[c] = TW_PORT_NET; });
 
 function copyToClipboard(txt) {
   if (navigator.clipboard && window.isSecureContext) {
