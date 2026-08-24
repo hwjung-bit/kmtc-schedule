@@ -486,7 +486,7 @@ const TERMINAL_SITES = {
     + 'berthScheduleT',
   'PNIT': 'https://www.pnitl.com/infoservice/vessel/'
     + 'vslScheduleList.jsp',
-  'BCT': 'https://info.bct2-4.com/',
+  'BCT': 'https://info.bct2-4.com/infoservice/',
   // Gwangyang
   'KIT': 'https://info.kitl.com/jsp/T03/'
     + 'bonsun.jsp?mainType=T03&subType=01',
@@ -532,6 +532,8 @@ const TERMINAL_SITES = {
 // BPT runs Sinseondae + Gamman off one info page
 TERMINAL_SITES['BPTG'] = TERMINAL_SITES['BPTS'];
 TERMINAL_SITES['BPT'] = TERMINAL_SITES['BPTS'];
+// BCT berths 2-4 arrive as BCT24 in the feed
+TERMINAL_SITES['BCT24'] = TERMINAL_SITES['BCT'];
 // Taiwan Port NET covers Keelung / Taichung / Kaohsiung berths
 const TW_PORT_NET = 'https://tpnet.twport.com.tw/IFAWeb/Function'
   + '?_RedirUrl=/IFAWeb/Board/ShipWharfAllStatus';
