@@ -2356,6 +2356,7 @@ function renderScheduleBody() {
           const etb = parseDate(c.etb);
           const etd = parseDate(c.etd);
           const tCode = c.terminal ? c.terminal.split(' ')[0] : '';
+          const isSkip = c.skip;
           body.appendChild(
             h('div', {style:{
               background:'var(--card)',borderRadius:'14px',
@@ -2372,12 +2373,19 @@ function renderScheduleBody() {
                     fontWeight:'800',fontSize:'14px',
                     color:'var(--ink)'}}, c.vessel_code),
                   h('span', {style:{fontSize:'12px',
-                    color:'var(--ink2)',fontWeight:'600'}},
+                    color: isSkip ? '#c0392b' : 'var(--ink2)',
+                    fontWeight:'600',
+                    textDecoration: isSkip ? 'line-through' : 'none'}},
                     portShort(c.port_name, c.port_code)),
                   tCode ? terminalChip(tCode, c.shipName, {
                     fontSize:'9px',padding:'1px 5px',
                     borderRadius:'5px'
-                  }) : null
+                  }) : null,
+                  isSkip ? h('span', {style:{
+                    fontSize:'9px',fontWeight:'700',
+                    color:'#c0392b',background:'#fdecea',
+                    padding:'1px 5px',borderRadius:'5px'
+                  }}, '스킵') : null
                 ]),
                 h('div', {style:{marginTop:'2px',
                   fontSize:'11px',color:'var(--ink3)'}},
@@ -3865,13 +3873,16 @@ function renderCombinedSearch(body) {
     const tCode = c.terminal ? c.terminal.split(' ')[0] : '';
     const isPast = etd && etd < now;
     const isBerthed = eta && eta <= now && etd && etd >= now;
+    const isSkip = c.skip;
 
     // Mark first non-past item for scroll target
     const isScrollTarget = !isPast && !markedCurrent;
     if (isScrollTarget) markedCurrent = true;
 
     // Status badge
-    const badge = isPast
+    const badge = isSkip
+      ? { text: '스킵', bg: '#fdecea', color: '#c0392b' }
+      : isPast
       ? { text: '완료', bg: '#eef1f6', color: '#97a2b5' }
       : isBerthed
         ? { text: '접안중', bg: '#e8f1fb', color: '#0064B4' }
@@ -3897,7 +3908,8 @@ function renderCombinedSearch(body) {
               fontWeight:'800',fontSize:'15px',
               color:'var(--ink)'}}, c.vessel_code),
             h('span', {style:{fontSize:'11px',
-              color:'var(--ink3)'}},
+              color: isSkip ? '#c0392b' : 'var(--ink3)',
+              textDecoration: isSkip ? 'line-through' : 'none'}},
               portShort(c.port_name, c.port_code)),
             tCode ? terminalChip(
               tCode, ship ? ship.name : '') : null,
@@ -4280,6 +4292,7 @@ function renderPortDetail(body) {
       const isMine = state.favorites.ship.includes(
         c.vessel_code
       );
+      const isSkip = c.skip;
       body.appendChild(
         h('div', {style:{
           background:'var(--card)',borderRadius:'14px',
@@ -4306,7 +4319,12 @@ function renderPortDetail(body) {
                 fontWeight:'700',color:'#0064B4',
                 background:'#e8f1fb',
                 padding:'1px 6px',borderRadius:'6px'
-              }}, c.terminal) : null
+              }}, c.terminal) : null,
+              isSkip ? h('span', {style:{
+                fontSize:'9px',fontWeight:'700',
+                color:'#c0392b',background:'#fdecea',
+                padding:'1px 6px',borderRadius:'6px'
+              }}, '\uc2a4\ud0b5') : null
             ]),
             h('div', {style:{marginTop:'2px',
               fontSize:'11px',color:'var(--ink3)'}},
