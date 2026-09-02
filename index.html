@@ -1349,14 +1349,96 @@ function processSchedule(rows) {
   return { voyages, current, next };
 }
 
+// A port call this long is a dry dock stay, not a normal call
+// (normal calls in the data top out at a few days).
+const DOCK_STAY_THRESHOLD_DAYS = 20;
+
+/**
+ * Infer dry dock periods directly from gateway schedule data:
+ * any port call whose ETD-ETA gap is unusually long. This is always
+ * as fresh as the last sync, unlike the manually maintained docks table.
+ */
+function findInferredDocks(rawRows) {
+  return (rawRows || [])
+    .map(c => {
+      const eta = parseDate(c.eta), etd = parseDate(c.etd);
+      if (!eta || !etd) return null;
+      const days = (etd - eta) / 86400000;
+      if (days < DOCK_STAY_THRESHOLD_DAYS) return null;
+      return {
+        port_name: c.port_name, port_code: c.port_code,
+        terminal: c.terminal, voyage_no: c.voyage_no,
+        start_date: c.eta, end_date: c.etd, days
+      };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Combine schedule-inferred dock periods (all ships) with the manual
+ * docks table. A manual entry that overlaps an inferred one only
+ * contributes its yard name; a manual entry with no overlap (outside
+ * the gateway's schedule window) is kept as-is.
+ */
+function getMergedDocks() {
+  const manual = state.docks || [];
+  const usedManual = new Set();
+  const merged = [];
+
+  (state.ships || []).forEach(ship => {
+    findInferredDocks(state.schedules[ship.code]).forEach(inf => {
+      const infStart = new Date(inf.start_date);
+      const infEnd = new Date(inf.end_date);
+      const matchIdx = manual.findIndex((m, idx) =>
+        !usedManual.has(idx) && m.code === ship.code &&
+        new Date(m.start_date) <= infEnd &&
+        new Date(m.end_date) >= infStart
+      );
+      if (matchIdx >= 0) usedManual.add(matchIdx);
+      merged.push({
+        code: ship.code, name: ship.name,
+        start_date: inf.start_date, end_date: inf.end_date,
+        yard: matchIdx >= 0 ? manual[matchIdx].yard : '',
+        port: inf.port_name, source: 'schedule'
+      });
+    });
+  });
+
+  manual.forEach((m, idx) => {
+    if (!usedManual.has(idx)) merged.push({ ...m, source: 'manual' });
+  });
+
+  return merged;
+}
+
 /**
  * Determine ship status & current position from ALL raw schedule data.
  * Looks across all voyages, not just "current" voyage.
  */
 function getShipPosition(rawRows, shipCode) {
-  // Check if ship is in dock (from docks table / spreadsheet)
-  if (shipCode && state.docks.length) {
-    const now = new Date();
+  const now = new Date();
+
+  // Schedule-derived long-stay call (live gateway data) is authoritative
+  // whenever it exists at all — a ship with an inferred dock window that
+  // just hasn't started/already ended is NOT in dock, full stop. Only
+  // fall back to the manual docks table when the schedule gives no
+  // dock signal for this ship at all.
+  const inferredDocks = findInferredDocks(rawRows);
+  if (inferredDocks.length) {
+    const currentInferred = inferredDocks.find(d =>
+      new Date(d.start_date) <= now && new Date(d.end_date) >= now
+    );
+    if (currentInferred) {
+      return {
+        status: { label: '입거중', color: '#c25d00',
+          bg: '#fff3e0', icon: '🔧' },
+        from: '', to: currentInferred.port_name,
+        eta: new Date(currentInferred.end_date),
+        voyage: currentInferred.voyage_no || '',
+        dock: currentInferred
+      };
+    }
+  } else if (shipCode && state.docks.length) {
     const dock = state.docks.find(d => {
       if (d.code !== shipCode) return false;
       const s = new Date(d.start_date);
@@ -1398,7 +1480,6 @@ function getShipPosition(rawRows, shipCode) {
   }
 
   // Simple time-based position: ETD < now = departed, ETA < now = arrived
-  const now = new Date();
   let lastDeparted = null;
   let berthedAt = null;
 
@@ -3076,6 +3157,7 @@ function clearAllHidden() {
    DOCK TAB
 ================================================== */
 function renderDockTab(container) {
+  const docks = getMergedDocks();
   const header = h('div', {className: 'tab-header'});
 
   const titleRow = h('div', {style:{
@@ -3111,9 +3193,9 @@ function renderDockTab(container) {
   header.appendChild(titleRow);
 
   // Stats
-  const currentCount = state.docks.filter(
+  const currentCount = docks.filter(
     d => isDockCurrent(d)).length;
-  const upcomingCount = state.docks.filter(
+  const upcomingCount = docks.filter(
     d => isDockUpcoming(d)).length;
   header.appendChild(
     h('div', {style:{marginTop:'4px',fontSize:'11.5px',
@@ -3157,7 +3239,7 @@ function renderDockTab(container) {
 
   if (dq) {
     // Search results
-    const results = state.docks.filter(d => {
+    const results = docks.filter(d => {
       const c = (d.code||'').toUpperCase();
       const n = (d.name||'').toUpperCase();
       return c.includes(dq) || n.includes(dq);
@@ -3171,7 +3253,7 @@ function renderDockTab(container) {
     });
   } else if (state.dockView === 'list') {
     // Current
-    const current = state.docks
+    const current = docks
       .filter(d => isDockCurrent(d));
     if (current.length) {
       body.appendChild(
@@ -3191,7 +3273,7 @@ function renderDockTab(container) {
     }
 
     // Upcoming
-    const upcoming = state.docks
+    const upcoming = docks
       .filter(d => isDockUpcoming(d))
       .sort((a, b) =>
         new Date(a.start_date) - new Date(b.start_date)
@@ -3222,7 +3304,7 @@ function renderDockTab(container) {
     });
 
     // Past
-    const past = state.docks
+    const past = docks
       .filter(d => isDockPast(d))
       .sort((a, b) =>
         new Date(b.start_date) - new Date(a.start_date)
@@ -3239,7 +3321,7 @@ function renderDockTab(container) {
     }
   } else {
     // Calendar view - group by year/month
-    renderDockCalendar(body);
+    renderDockCalendar(body, docks);
   }
 
   container.appendChild(body);
@@ -3306,7 +3388,10 @@ function renderDockItem(d, phase) {
           color: phase === 'current' ? '#c25d00' : '#0064B4',
           background: phase === 'current' ? '#fff3e0' : '#e8f1fb',
           padding:'2px 7px',borderRadius:'8px'
-        }}, d.yard || '미정')
+        }}, d.yard || d.port || '미정'),
+        h('span', {style:{fontSize:'10px',fontWeight:'600',
+          color:'#9aa5b6'
+        }}, d.source === 'manual' ? '✏️ 수기' : '\u{1F4E1} 자동감지')
       ]),
       h('div', {style:{marginTop:'4px',fontSize:'12px',
         color:'var(--ink2)',fontFamily:'Inter',
@@ -3322,11 +3407,10 @@ function renderDockItem(d, phase) {
   ]);
 }
 
-function renderDockCalendar(body) {
-  // Group docks by year and month
+function renderDockCalendar(body, docks) {
+  // Group docks by year and month (past history included)
   const groups = {};
-  state.docks.forEach(d => {
-    if (isDockPast(d)) return;
+  docks.forEach(d => {
     const s = new Date(d.start_date);
     const ym = s.getFullYear() + '-'
       + String(s.getMonth() + 1).padStart(2, '0');
@@ -3419,8 +3503,8 @@ function renderDockCalendar(body) {
         );
         mg.items.forEach(d => {
           const s = new Date(d.start_date);
-          const phase = isDockCurrent(d)
-            ? 'current' : 'upcoming';
+          const phase = isDockCurrent(d) ? 'current'
+            : isDockPast(d) ? 'past' : 'upcoming';
           const dd = Math.max(0,
             Math.ceil(
               (s - new Date()) / 86400000
@@ -3440,8 +3524,8 @@ function renderDockCalendar(body) {
                 h('div', {style:{
                   fontFamily:'Inter',fontWeight:'800',
                   fontSize:'16px',
-                  color: phase === 'current'
-                    ? '#ee7c1a' : '#0064B4',
+                  color: phase === 'current' ? '#ee7c1a'
+                    : phase === 'past' ? '#9aa5b6' : '#0064B4',
                   lineHeight:'1'
                 }}, s.getDate() + '일'),
               ]),
@@ -3464,13 +3548,13 @@ function renderDockCalendar(body) {
               h('span', {style:{
                 flex:'0 0 auto',fontFamily:'Inter',
                 fontSize:'12px',fontWeight:'800',
-                color: phase === 'current'
-                  ? '#c25d00' : '#0064B4',
-                background: phase === 'current'
-                  ? '#fff3e0' : '#e8f1fb',
+                color: phase === 'current' ? '#c25d00'
+                  : phase === 'past' ? '#5b6a82' : '#0064B4',
+                background: phase === 'current' ? '#fff3e0'
+                  : phase === 'past' ? '#eef1f6' : '#e8f1fb',
                 padding:'4px 10px',borderRadius:'18px'
-              }}, phase === 'current'
-                ? '진행중' : 'D-' + dd)
+              }}, phase === 'current' ? '진행중'
+                : phase === 'past' ? '완료' : 'D-' + dd)
             ])
           );
         });
@@ -3595,6 +3679,41 @@ function renderPortTab(container) {
   }
   searchRow.appendChild(shipBox);
   header.appendChild(searchRow);
+
+  // Dock quick-jump — shown while browsing one ship's schedule,
+  // only if that ship has a dock entry (current/upcoming/past)
+  if (state.portShipQuery) {
+    const sqCode = state.portShipQuery.trim().toUpperCase();
+    const shipDocks = getMergedDocks().filter(d =>
+      d.code.toUpperCase() === sqCode
+    );
+    if (shipDocks.length) {
+      const nowD = new Date();
+      const activeDock = shipDocks.find(d =>
+        new Date(d.start_date) <= nowD && new Date(d.end_date) >= nowD
+      );
+      header.appendChild(
+        h('div', {
+          style: {
+            display:'flex',alignItems:'center',
+            justifyContent:'center',gap:'6px',
+            padding:'8px 0',marginTop:'10px',
+            borderRadius:'10px',cursor:'pointer',
+            fontSize:'12px',fontWeight:'700',
+            color: activeDock ? '#c25d00' : '#0064B4',
+            background: activeDock
+              ? 'rgba(255,243,224,.9)' : 'rgba(232,241,251,.9)'
+          },
+          onClick: () => {
+            state.activeTab = 'dock';
+            state.dockQuery = sqCode;
+            render();
+          }
+        }, '\u{1F527} ' + (activeDock ? '입거중 — 입거 일정 보기'
+          : '입거 일정 보기'))
+      );
+    }
+  }
 
   // Combined search results
   if (state.portQuery && state.portShipQuery) {
@@ -3874,13 +3993,19 @@ function renderCombinedSearch(body) {
     const isPast = etd && etd < now;
     const isBerthed = eta && eta <= now && etd && etd >= now;
     const isSkip = c.skip;
+    // Long-stay call = dry dock, not a normal port call
+    const isDock = eta && etd
+      && (etd - eta) / 86400000 >= DOCK_STAY_THRESHOLD_DAYS;
 
     // Mark first non-past item for scroll target
     const isScrollTarget = !isPast && !markedCurrent;
     if (isScrollTarget) markedCurrent = true;
 
     // Status badge
-    const badge = isSkip
+    const badge = isDock
+      ? { text: '\u{1F527} 입거 (' + Math.round((etd - eta) / 86400000) + '일)',
+          bg: '#ffe2b8', color: '#c25d00' }
+      : isSkip
       ? { text: '스킵', bg: '#fdecea', color: '#c0392b' }
       : isPast
       ? { text: '완료', bg: '#eef1f6', color: '#97a2b5' }
@@ -3891,14 +4016,16 @@ function renderCombinedSearch(body) {
     const card = h('div', {
       id: isScrollTarget ? 'search-current-anchor' : '',
       style:{
-        background:'var(--card)',borderRadius:'14px',
-        border:'1px solid var(--cardbr)',
+        background: isDock ? '#fff8ef' : 'var(--card)',
+        borderRadius:'14px',
+        border: isDock ? '1px solid #ffcd8a'
+          : '1px solid var(--cardbr)',
         boxShadow:'0 2px 8px rgba(20,40,80,.05)',
         padding:'10px 14px',display:'flex',
         alignItems:'center',
         justifyContent:'space-between',gap:'10px',
         marginBottom:'10px',
-        opacity: isPast ? '0.55' : '1'
+        opacity: isPast && !isDock ? '0.55' : '1'
       }}, [
         h('div', {style:{minWidth:'0'}}, [
           h('div', {style:{display:'flex',
