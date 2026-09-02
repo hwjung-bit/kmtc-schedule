@@ -913,7 +913,6 @@ const state = {
   ships: [],        // from ships table
   schedules: {},    // vessel_code -> rows
   routes: {},       // 'vessel|voyage|port' -> {cd, nm}
-  docks: [],        // from docks table
   favorites: { ship: [], port: [] },
   hiddenShips: [],
 
@@ -1169,18 +1168,6 @@ function needsHistory(dateStr) {
   return d < cutoff;
 }
 
-async function loadDocks() {
-  // Load from docks table only (spreadsheet-based, accurate)
-  const { data, error } = await sb
-    .from('docks').select('*')
-    .order('start_date');
-  if (error) {
-    console.error('docks load error:', error);
-    return [];
-  }
-  return data || [];
-}
-
 async function loadFavorites(email) {
   if (!email) return { ship: [], port: [] };
   const { data } = await sb
@@ -1375,40 +1362,21 @@ function findInferredDocks(rawRows) {
 }
 
 /**
- * Combine schedule-inferred dock periods (all ships) with the manual
- * docks table. A manual entry that overlaps an inferred one only
- * contributes its yard name; a manual entry with no overlap (outside
- * the gateway's schedule window) is kept as-is.
+ * Schedule-inferred dock periods for every ship — the single source
+ * of truth for dock status, no manual data entry involved.
  */
-function getMergedDocks() {
-  const manual = state.docks || [];
-  const usedManual = new Set();
-  const merged = [];
-
+function getAllDocks() {
+  const all = [];
   (state.ships || []).forEach(ship => {
     findInferredDocks(state.schedules[ship.code]).forEach(inf => {
-      const infStart = new Date(inf.start_date);
-      const infEnd = new Date(inf.end_date);
-      const matchIdx = manual.findIndex((m, idx) =>
-        !usedManual.has(idx) && m.code === ship.code &&
-        new Date(m.start_date) <= infEnd &&
-        new Date(m.end_date) >= infStart
-      );
-      if (matchIdx >= 0) usedManual.add(matchIdx);
-      merged.push({
+      all.push({
         code: ship.code, name: ship.name,
         start_date: inf.start_date, end_date: inf.end_date,
-        yard: matchIdx >= 0 ? manual[matchIdx].yard : '',
-        port: inf.port_name, source: 'schedule'
+        port: inf.port_name
       });
     });
   });
-
-  manual.forEach((m, idx) => {
-    if (!usedManual.has(idx)) merged.push({ ...m, source: 'manual' });
-  });
-
-  return merged;
+  return all;
 }
 
 /**
@@ -1418,44 +1386,20 @@ function getMergedDocks() {
 function getShipPosition(rawRows, shipCode) {
   const now = new Date();
 
-  // Schedule-derived long-stay call (live gateway data) is authoritative
-  // whenever it exists at all — a ship with an inferred dock window that
-  // just hasn't started/already ended is NOT in dock, full stop. Only
-  // fall back to the manual docks table when the schedule gives no
-  // dock signal for this ship at all.
-  const inferredDocks = findInferredDocks(rawRows);
-  if (inferredDocks.length) {
-    const currentInferred = inferredDocks.find(d =>
-      new Date(d.start_date) <= now && new Date(d.end_date) >= now
-    );
-    if (currentInferred) {
-      return {
-        status: { label: '입거중', color: '#c25d00',
-          bg: '#fff3e0', icon: '🔧' },
-        from: '', to: currentInferred.port_name,
-        eta: new Date(currentInferred.end_date),
-        voyage: currentInferred.voyage_no || '',
-        dock: currentInferred
-      };
-    }
-  } else if (shipCode && state.docks.length) {
-    const dock = state.docks.find(d => {
-      if (d.code !== shipCode) return false;
-      const s = new Date(d.start_date);
-      const e = new Date(d.end_date);
-      return s <= now && e >= now;
-    });
-    if (dock) {
-      return {
-        status: { label: '입거중', color: '#c25d00',
-          bg: '#fff3e0', icon: '🔧' },
-        from: dock.yard || '',
-        to: dock.port || '',
-        eta: new Date(dock.end_date),
-        voyage: '',
-        dock: dock
-      };
-    }
+  // Schedule-derived long-stay call (live gateway data) — always
+  // up to date, no manual data entry needed.
+  const currentInferred = findInferredDocks(rawRows).find(d =>
+    new Date(d.start_date) <= now && new Date(d.end_date) >= now
+  );
+  if (currentInferred) {
+    return {
+      status: { label: '입거중', color: '#c25d00',
+        bg: '#fff3e0', icon: '🔧' },
+      from: '', to: currentInferred.port_name,
+      eta: new Date(currentInferred.end_date),
+      voyage: currentInferred.voyage_no || '',
+      dock: currentInferred
+    };
   }
 
   if (!rawRows || !rawRows.length) {
@@ -2132,9 +2076,15 @@ function renderOverviewBody() {
       boxShadow:'0 1px 4px rgba(20,40,80,.04)',
       cursor:'pointer'
     }, onClick: () => {
-      state.activeTab = 'schedule';
-      state.portShipQuery = code;
-      state.portQuery = '';
+      if (pos.dock) {
+        // In dock — jump straight to its location in the dock tab
+        state.activeTab = 'dock';
+        state.dockQuery = code;
+      } else {
+        state.activeTab = 'schedule';
+        state.portShipQuery = code;
+        state.portQuery = '';
+      }
       render();
     }});
 
@@ -3157,7 +3107,7 @@ function clearAllHidden() {
    DOCK TAB
 ================================================== */
 function renderDockTab(container) {
-  const docks = getMergedDocks();
+  const docks = getAllDocks();
   const header = h('div', {className: 'tab-header'});
 
   const titleRow = h('div', {style:{
@@ -3388,10 +3338,7 @@ function renderDockItem(d, phase) {
           color: phase === 'current' ? '#c25d00' : '#0064B4',
           background: phase === 'current' ? '#fff3e0' : '#e8f1fb',
           padding:'2px 7px',borderRadius:'8px'
-        }}, d.yard || d.port || '미정'),
-        h('span', {style:{fontSize:'10px',fontWeight:'600',
-          color:'#9aa5b6'
-        }}, d.source === 'manual' ? '✏️ 수기' : '\u{1F4E1} 자동감지')
+        }}, d.port || '미정')
       ]),
       h('div', {style:{marginTop:'4px',fontSize:'12px',
         color:'var(--ink2)',fontFamily:'Inter',
@@ -3684,7 +3631,7 @@ function renderPortTab(container) {
   // only if that ship has a dock entry (current/upcoming/past)
   if (state.portShipQuery) {
     const sqCode = state.portShipQuery.trim().toUpperCase();
-    const shipDocks = getMergedDocks().filter(d =>
+    const shipDocks = getAllDocks().filter(d =>
       d.code.toUpperCase() === sqCode
     );
     if (shipDocks.length) {
@@ -5721,7 +5668,6 @@ function renderSystemSettings(body) {
         const map = await loadScheduleFor(favCodes);
         Object.assign(state.schedules, map);
       }
-      state.docks = await loadDocks();
       state.loading = false;
       state.lastUpdate = fmtFull(new Date());
       showToast('\u2713 최신 데이터로 업데이트 완료');
@@ -5911,7 +5857,7 @@ function renderSystemSettings(body) {
     ['등록 선박 / 총 항차',
       state.ships.length + '척 / '
       + totalVoyages + '항차'],
-    ['도크 일정', state.docks.length + '건'],
+    ['도크 일정', getAllDocks().length + '건'],
     ['사용자', state.registeredUsers.length + '명'],
   ];
   statRows.forEach(([label, val]) => {
@@ -5944,16 +5890,14 @@ async function initAppData() {
     console.log('initAppData: ships loaded:', state.ships.length);
     render();
 
-    // Load favorites, docks, config in parallel
+    // Load favorites, config, routes in parallel
     const email = state.user ? state.user.email : null;
-    const [favs, docks, config, routes] = await Promise.all([
+    const [favs, config, routes] = await Promise.all([
       loadFavorites(email),
-      loadDocks(),
       loadConfig(),
       loadRoutes()
     ]);
     state.favorites = favs;
-    state.docks = docks;
     state.routes = routes;
     if (config.last_update) {
       state.lastUpdate = config.last_update;
