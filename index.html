@@ -2076,15 +2076,11 @@ function renderOverviewBody() {
       boxShadow:'0 1px 4px rgba(20,40,80,.04)',
       cursor:'pointer'
     }, onClick: () => {
-      if (pos.dock) {
-        // In dock — jump straight to its location in the dock tab
-        state.activeTab = 'dock';
-        state.dockQuery = code;
-      } else {
-        state.activeTab = 'schedule';
-        state.portShipQuery = code;
-        state.portQuery = '';
-      }
+      state.activeTab = 'schedule';
+      state.portShipQuery = code;
+      state.portQuery = '';
+      // In dock — jump straight to that call in the schedule view
+      if (pos.dock) state.scrollToCurrent = true;
       render();
     }});
 
@@ -3652,11 +3648,12 @@ function renderPortTab(container) {
               ? 'rgba(255,243,224,.9)' : 'rgba(232,241,251,.9)'
           },
           onClick: () => {
-            state.activeTab = 'dock';
-            state.dockQuery = sqCode;
-            render();
+            const el = document.getElementById('dock-call-anchor')
+              || document.getElementById('search-current-anchor');
+            if (el) el.scrollIntoView(
+              { behavior: 'smooth', block: 'start' });
           }
-        }, '\u{1F527} ' + (activeDock ? '입거중 — 입거 일정 보기'
+        }, '\u{1F527} ' + (activeDock ? '입거중 — 위치 보기'
           : '입거 일정 보기'))
       );
     }
@@ -3931,6 +3928,7 @@ function renderCombinedSearch(body) {
   }
 
   let markedCurrent = false;
+  let markedDockAnchor = false;
   displayResults.slice(0, state.searchLimit).forEach(c => {
     const eta = parseDate(c.eta);
     const etb = parseDate(c.etb);
@@ -3947,6 +3945,10 @@ function renderCombinedSearch(body) {
     // Mark first non-past item for scroll target
     const isScrollTarget = !isPast && !markedCurrent;
     if (isScrollTarget) markedCurrent = true;
+    // Mark the soonest dock call as its own jump target, independent
+    // of whether it's the ship's "current" position right now
+    const isDockAnchor = isDock && !markedDockAnchor;
+    if (isDockAnchor) markedDockAnchor = true;
 
     // Status badge
     const badge = isDock
@@ -3961,7 +3963,8 @@ function renderCombinedSearch(body) {
         : { text: '예정', bg: '#e6f4ea', color: '#1b7a3d' };
 
     const card = h('div', {
-      id: isScrollTarget ? 'search-current-anchor' : '',
+      id: isDockAnchor ? 'dock-call-anchor'
+        : isScrollTarget ? 'search-current-anchor' : '',
       style:{
         background: isDock ? '#fff8ef' : 'var(--card)',
         borderRadius:'14px',
@@ -4022,13 +4025,17 @@ function renderCombinedSearch(body) {
   });
 
 
-  // Auto-scroll to current schedule when past is toggled open
-  if (!ranged && showPastSearch && pastResults.length > 0) {
+  // Auto-scroll to current schedule when past is toggled open,
+  // or right after navigating here to jump straight to a ship's
+  // current position (e.g. from the overview tab / dock shortcut)
+  if ((!ranged && showPastSearch && pastResults.length > 0)
+      || state.scrollToCurrent) {
+    state.scrollToCurrent = false;
     setTimeout(() => {
-      const anchor = document.getElementById(
-        'search-current-anchor');
+      const anchor = document.getElementById('dock-call-anchor')
+        || document.getElementById('search-current-anchor');
       if (anchor) anchor.scrollIntoView(
-        { behavior: 'auto', block: 'start' });
+        { behavior: 'smooth', block: 'start' });
     }, 50);
   }
 
