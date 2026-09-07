@@ -320,15 +320,21 @@ async function fetchSingleVessel(vesselCode,
 /**
  * opts.discover   probe for voyages past the cached sequence
  * opts.aheadDays  how far ahead to refresh existing voyages
+ * opts.fromDays   refresh only voyages starting at least this far ahead
+ *                 (weekly long-range sweep). Without it the run refreshes
+ *                 the active window: every voyage with a call that has not
+ *                 departed yet (3-day grace so actuals settle). Completed
+ *                 voyages never change, so re-fetching them wastes quota.
  *
  * The gateway meters total request volume, so the frequent run keeps
- * both numbers small and a once-a-day run does the wide sweep.
+ * the horizon short and the wide sweeps run a few times a day.
  */
 async function syncSchedules(opts) {
   const discover = opts.discover;
   const aheadDays = opts.aheadDays;
+  const fromDays = opts.fromDays || 0;
   console.log(`=== SYNC START (discover=${discover},` +
-    ` ahead=${aheadDays}d) ===`);
+    ` from=${fromDays}d ahead=${aheadDays}d) ===`);
   const { data: ships } = await sb
     .from('ships').select('code');
   if (!ships || !ships.length) {
@@ -428,24 +434,29 @@ async function syncSchedules(opts) {
     }
 
     // ── Step 2: Active + Future status updates ──
-    // 30-day lookback to catch currently berthed ships;
-    // the horizon ahead is short on the frequent run because
+    // The horizon ahead is short on the frequent run because
     // distant voyages are not firm and cost API quota.
-    const past30 = new Date(
-      Date.now() - 30 * 24 * 3600 * 1000);
-    const past30Str = past30.toISOString()
-      .split('T')[0];
-    const ahead = new Date(
-      Date.now() + aheadDays * 24 * 3600 * 1000);
-    const aheadStr = ahead.toISOString()
-      .split('T')[0];
+    const dayStr = offsetDays =>
+      new Date(Date.now() + offsetDays * 24 * 3600 * 1000)
+        .toISOString().split('T')[0];
+    const aheadStr = dayStr(aheadDays);
 
-    const { data: futureRows } = await sb
+    // Nearest voyages first, so a run cut off by the job timeout
+    // leaves only the far tail stale.
+    let fq = sb
       .from('schedules')
       .select('id,voyage_no,port_code')
       .eq('vessel_code', vc)
-      .gte('eta', past30Str)
-      .lte('eta', aheadStr);
+      .lte('eta', aheadStr)
+      .order('eta', { ascending: true });
+    if (fromDays) {
+      fq = fq.gte('eta', dayStr(fromDays));
+    } else {
+      // Any call not departed yet keeps its voyage in the window,
+      // including ships sitting in port or dock past their ETD.
+      fq = fq.gte('etd', dayStr(-3));
+    }
+    const { data: futureRows } = await fq;
 
     // Group by voyage
     const futureVoys = new Set();
@@ -454,11 +465,17 @@ async function syncSchedules(opts) {
     });
 
     let updatedCount = 0, refreshedVoys = 0, skippedVoys = 0;
+    let liveVoys = 0;
+    const ghostCandidates = [];
     for (const fvoy of futureVoys) {
       const res = await kmtcFetch(vc, fvoy);
-      // API failed or returned nothing — keep what we have
+      // API failed — keep what we have
       if (!res.ok) { skippedVoys++; continue; }
-      if (!res.rows.length) continue;
+      // Explicit "no such voyage": the gateway withdrew or renumbered
+      // it. Decide after the loop, once we know the gateway answered
+      // properly for this vessel at all.
+      if (!res.rows.length) { ghostCandidates.push(fvoy); continue; }
+      liveVoys++;
       const frows = normalizePortCalls(
         vc, fvoy, '', res.rows);
       if (!frows.length) continue;
@@ -478,10 +495,29 @@ async function syncSchedules(opts) {
       updatedCount += frows.length;
     }
 
+    // ── Step 3: Drop ghost voyages ──
+    // Only when the gateway proved responsive for this vessel, and only
+    // voyages with no past calls — a withdrawn future proforma, not
+    // history. Lowering the cache lets discovery pick the number up
+    // again if KMTC republishes it.
+    let purgedVoys = 0;
+    if (liveVoys > 0) {
+      for (const gvoy of ghostCandidates) {
+        if (!(await isGhostVoyage(vc, gvoy))) continue;
+        await sbDelete('schedules', {
+          vessel_code: vc, voyage_no: gvoy
+        });
+        purgedVoys++;
+        console.log(`${vc}/${gvoy}: GHOST purged (gateway has no data)`);
+      }
+      if (purgedVoys) await lowerVoyageCache(vc, c.prefix, c.seq);
+    }
+
     totalUpdated += updatedCount;
     console.log(`${vc}: +${newRows.length} new,` +
       ` ${refreshedVoys}/${futureVoys.size} voys refreshed` +
-      (skippedVoys ? `, ${skippedVoys} skipped (API)` : ''));
+      (skippedVoys ? `, ${skippedVoys} skipped (API)` : '') +
+      (purgedVoys ? `, ${purgedVoys} ghost purged` : ''));
 
     await sleep(300);
   }
@@ -494,6 +530,56 @@ async function syncSchedules(opts) {
 
   console.log(`=== SYNC DONE: +${totalNew} new,` +
     ` ${totalUpdated} updated ===`);
+}
+
+/**
+ * A voyage is a ghost when the gateway answers "no data" twice in a row
+ * and none of its stored calls lie in the past. One empty answer could be
+ * a hiccup; a voyage with actual calls is history we keep regardless.
+ */
+async function isGhostVoyage(vesselCode, voyageNo) {
+  await sleep(5000);
+  const again = await kmtcFetch(vesselCode, voyageNo);
+  if (!again.ok || again.rows.length) return false;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const { data, error } = await sb
+    .from('schedules')
+    .select('id')
+    .eq('vessel_code', vesselCode)
+    .eq('voyage_no', voyageNo)
+    .lt('eta', todayStr)
+    .limit(1);
+  if (error) return false;
+  return !(data && data.length);
+}
+
+/**
+ * After purging, the highest voyage still stored may sit below the cached
+ * sequence. Discovery probes from the cache, so pull it down or the
+ * republished voyage would never be found.
+ */
+async function lowerVoyageCache(vesselCode, prefix, cachedSeq) {
+  const { data } = await sb
+    .from('schedules')
+    .select('voyage_no')
+    .eq('vessel_code', vesselCode)
+    .order('voyage_no', { ascending: false })
+    .limit(200);
+  let maxSeq = 0;
+  (data || []).forEach(r => {
+    const v = String(r.voyage_no || '');
+    if (!v.startsWith(prefix)) return;
+    const n = parseInt(v.slice(prefix.length, prefix.length + 2), 10);
+    if (n > maxSeq) maxSeq = n;
+  });
+  if (!maxSeq || maxSeq >= cachedSeq) return;
+  await sbUpsert('voyage_cache', [{
+    vessel_code: vesselCode,
+    last_prefix: prefix,
+    last_seq: maxSeq
+  }], 'vessel_code');
+  console.log(`${vesselCode}: voyage cache ${cachedSeq} -> ${maxSeq}`);
 }
 
 function reportApiHealth() {
@@ -530,6 +616,16 @@ async function main() {
     // Once a day: look for new voyages and refresh the wide horizon
     await syncSchedules({ discover: true, aheadDays: 90 });
     await syncRoutes(sb, {});
+  } else if (mode === 'wide') {
+    // Midday and evening: same sweep as daily, minus the route sync.
+    // KMTC revises schedules during office hours; one sweep at dawn
+    // left those changes invisible until the next morning.
+    await syncSchedules({ discover: true, aheadDays: 90 });
+  } else if (mode === 'longrange') {
+    // Weekly: proforma voyages beyond the daily horizon. They drift by
+    // weeks otherwise, since nothing else touches them until they come
+    // within 90 days.
+    await syncSchedules({ discover: false, fromDays: 90, aheadDays: 400 });
   } else if (mode === 'routes') {
     await syncRoutes(sb, {});
   } else if (mode === 'routes-backfill') {
