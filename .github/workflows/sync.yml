@@ -28,7 +28,7 @@ on:
           - routes
           - routes-backfill
       vessel_code:
-        description: 'Vessel code (for single mode only)'
+        description: 'Vessel code (single), or comma list to limit wide/longrange'
         required: false
         default: ''
 

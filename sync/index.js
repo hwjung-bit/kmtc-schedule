@@ -335,8 +335,13 @@ async function syncSchedules(opts) {
   const fromDays = opts.fromDays || 0;
   console.log(`=== SYNC START (discover=${discover},` +
     ` from=${fromDays}d ahead=${aheadDays}d) ===`);
-  const { data: ships } = await sb
+  let { data: ships } = await sb
     .from('ships').select('code');
+  // opts.vessels: comma-separated codes to limit a manual run to
+  if (opts.vessels) {
+    const want = opts.vessels.split(',').map(s => s.trim());
+    ships = (ships || []).filter(s => want.includes(s.code));
+  }
   if (!ships || !ships.length) {
     console.log('No ships.');
     return;
@@ -501,7 +506,8 @@ async function syncSchedules(opts) {
     // history. Lowering the cache lets discovery pick the number up
     // again if KMTC republishes it.
     let purgedVoys = 0;
-    if (liveVoys > 0) {
+    if (ghostCandidates.length &&
+        (liveVoys > 0 || await gatewayKnowsVessel(vc))) {
       for (const gvoy of ghostCandidates) {
         if (!(await isGhostVoyage(vc, gvoy))) continue;
         await sbDelete('schedules', {
@@ -552,6 +558,26 @@ async function isGhostVoyage(vesselCode, voyageNo) {
     .limit(1);
   if (error) return false;
   return !(data && data.length);
+}
+
+/**
+ * The long-range sweep can hit a vessel whose whole far tail is ghosts,
+ * so it sees no live voyage to prove the gateway answers for that vessel.
+ * Fetch its nearest upcoming voyage as the health check instead.
+ */
+async function gatewayKnowsVessel(vesselCode) {
+  const recentStr = new Date(Date.now() - 14 * 24 * 3600 * 1000)
+    .toISOString().split('T')[0];
+  const { data } = await sb
+    .from('schedules')
+    .select('voyage_no')
+    .eq('vessel_code', vesselCode)
+    .gte('eta', recentStr)
+    .order('eta', { ascending: true })
+    .limit(1);
+  if (!data || !data.length) return false;
+  const res = await kmtcFetch(vesselCode, data[0].voyage_no);
+  return res.ok && res.rows.length > 0;
 }
 
 /**
@@ -620,12 +646,14 @@ async function main() {
     // Midday and evening: same sweep as daily, minus the route sync.
     // KMTC revises schedules during office hours; one sweep at dawn
     // left those changes invisible until the next morning.
-    await syncSchedules({ discover: true, aheadDays: 90 });
+    await syncSchedules({
+      discover: true, aheadDays: 90, vessels: vesselCode });
   } else if (mode === 'longrange') {
     // Weekly: proforma voyages beyond the daily horizon. They drift by
     // weeks otherwise, since nothing else touches them until they come
     // within 90 days.
-    await syncSchedules({ discover: false, fromDays: 90, aheadDays: 400 });
+    await syncSchedules({
+      discover: false, fromDays: 90, aheadDays: 400, vessels: vesselCode });
   } else if (mode === 'routes') {
     await syncRoutes(sb, {});
   } else if (mode === 'routes-backfill') {
