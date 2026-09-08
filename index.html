@@ -1357,7 +1357,8 @@ function findInferredDocks(rawRows) {
       return {
         port_name: c.port_name, port_code: c.port_code,
         terminal: c.terminal, voyage_no: c.voyage_no,
-        start_date: c.eta, end_date: c.etd, days
+        start_date: c.eta, end_date: c.etd, days,
+        call: c
       };
     })
     .filter(Boolean);
@@ -1374,7 +1375,10 @@ function getAllDocks() {
       all.push({
         code: ship.code, name: ship.name,
         start_date: inf.start_date, end_date: inf.end_date,
-        port: inf.port_name
+        port: inf.port_name,
+        // Raw port call, so the dock card can offer the same
+        // mail-friendly copy as a schedule row
+        call: inf.call
       });
     });
   });
@@ -3342,6 +3346,7 @@ function renderDockItem(d, phase) {
         color:'var(--ink2)',fontFamily:'Inter',
         fontWeight:'600'}}, period + ' (' + days + '일)')
     ]),
+    copyCallBtn(d.call),
     h('span', {style:{
       flex:'0 0 auto',fontFamily:'Inter',
       fontSize: phase === 'upcoming' ? '13px' : '11px',
