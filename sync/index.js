@@ -283,6 +283,10 @@ async function fetchSingleVessel(vesselCode,
         if (seenData > 0) {
           empties++;
           if (empties >= 5) break;
+        } else if (seq >= 5) {
+          // Voyage numbers restart at 01 each year, so a prefix with
+          // nothing in 01..05 has no voyages at all — skip the rest.
+          break;
         }
       }
     }
