@@ -530,6 +530,15 @@ const TERMINAL_SITES = {
   'BMCT': 'https://www.bmct.co.in/vessel-schedule',
   // Colombo
   'SAGT': 'https://www.sagt.com.lk/vessel-schedule.html',
+  // --- Overseas terminals (URLs verified 2026-09-15) ---
+  // Cai Mep (CMIT) — vessel-name search
+  'CMIP': 'https://cap.cmit.com.vn/Vessel-Schedule',
+  // Surabaya (TPS)
+  'SBCT': 'https://www.tps.co.id/en/online-services-and-schedule',
+  // Laem Chabang B5/C3 (LCIT)
+  'LCIT': 'https://www.lcit.com/vessel',
+  // Haiphong (HICT) — per-service schedule pages
+  'HICT1': 'https://hict.net.vn/ho-tro-khach-hang/pages/lich-tau.aspx',
 };
 // BPT runs Sinseondae + Gamman off one info page
 TERMINAL_SITES['BPTG'] = TERMINAL_SITES['BPTS'];
@@ -857,7 +866,9 @@ const GROUP_COLORS = {
   '4300 TEU': '#6a3ab5',
   '4300': '#6a3ab5',
   '5500~6500 TEU': '#8e24aa',
-  '5500~6500': '#8e24aa'
+  '5500~6500': '#8e24aa',
+  '8700 TEU': '#c62828',
+  '8700': '#c62828'
 };
 function groupColor(ship) {
   const g = ship.ship_group || ship.size_type || '';
@@ -871,6 +882,7 @@ function groupColor(ship) {
   if (/1800|BKKMAX/.test(st)) return '#1e88e5';
   if (/2500|2800/.test(st)) return '#3949ab';
   if (/4300/.test(st)) return '#6a3ab5';
+  if (/8700|8748/.test(st)) return '#c62828';
   return '#8e24aa';
 }
 function groupKey(ship) {
@@ -879,11 +891,13 @@ function groupKey(ship) {
   if (/1800|BKKMAX/.test(st)) return '1800 TEU';
   if (/2500|2800/.test(st)) return '2500~2800 TEU';
   if (/4300/.test(st)) return '4300 TEU';
+  if (/8700|8748/.test(st)) return '8700 TEU';
   return '5500~6500 TEU';
 }
 const GROUP_ORDER = [
   '700~1000 TEU','1800 TEU',
-  '2500~2800 TEU','4300 TEU','5500~6500 TEU'
+  '2500~2800 TEU','4300 TEU','5500~6500 TEU',
+  '8700 TEU'
 ];
 
 // Default ship display order
@@ -891,8 +905,8 @@ const SHIP_ORDER = [
   'KPS','KUS','KKL','KSG','KJT','KSH',
   'KQD','KTJ','KHM','KNB','KSZ',
   'KMB','KDB','KCN','KMN','KJA','KNH',
-  'KMU','KSL','KCB','KDE',
-  'SDL','SDY','SAC'
+  'KMU','KSL','KCB','KDE','KLB',
+  'SDL','SDY','SAC','SRO'
 ];
 
 /* ==================================================
