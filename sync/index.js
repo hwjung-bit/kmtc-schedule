@@ -20,6 +20,12 @@ const ALL_DIRS = ['S', 'N', 'E', 'W', 'D', 'P'];
 const MIN_INTERVAL_MS = 800;
 const MAX_RETRIES = 5;
 
+// Crews only act on the next few weeks. Voyages that start past this
+// are not stored, and stored ones drifting beyond PURGE_DAYS are
+// dropped — long-range proformas drift and cost gateway quota.
+const HORIZON_DAYS = 45;
+const PURGE_DAYS = 60;
+
 let lastCallAt = 0;
 let rateLimitHits = 0;
 let failedFetches = 0;
@@ -385,6 +391,16 @@ async function syncSchedules(opts) {
   }
 
   let totalNew = 0, totalUpdated = 0;
+  const horizonStr = new Date(
+    Date.now() + HORIZON_DAYS * 24 * 3600 * 1000)
+    .toISOString().split('T')[0];
+  const purgeStr = new Date(
+    Date.now() + PURGE_DAYS * 24 * 3600 * 1000)
+    .toISOString().split('T')[0];
+  const startsBeyond = rows => rows.every(
+    r => !r.eta || r.eta.slice(0, 10) > horizonStr);
+  const keyOf = r =>
+    `${r.vessel_code}:${r.voyage_no}:${r.port_code}`;
 
   for (const ship of ships) {
     const vc = ship.code;
@@ -413,12 +429,14 @@ async function syncSchedules(opts) {
         // stop advancing instead of recording a false ceiling.
         if (!res.ok) { discoveryFailed = true; break; }
         if (!res.rows.length) continue;
-        seqFound = true;
         const rows = normalizePortCalls(
           vc, voy, dir, res.rows);
+        // Not stored yet — the cache stays put, so the next
+        // sweep probes this number again as it nears.
+        if (startsBeyond(rows)) continue;
+        seqFound = true;
         for (const r of rows) {
-          const key =
-            `${r.vessel_code}:${r.voyage_no}:${r.port_code}`;
+          const key = keyOf(r);
           if (!existingKeys.has(key)) {
             newRows.push(r);
             existingKeys.add(key);
@@ -523,11 +541,67 @@ async function syncSchedules(opts) {
       if (purgedVoys) await lowerVoyageCache(vc, c.prefix, c.seq);
     }
 
+    // ── Step 4: Sibling directions ──
+    // A service change renumbers 2608S/N into 2608W/E. The refresh
+    // only re-fetches stored keys and discovery never looks below
+    // the cached sequence, so probe the other directions of every
+    // active sequence.
+    let siblingVoys = 0;
+    if (discover) {
+      const seqs = new Set(
+        [...futureVoys].map(v => v.slice(0, -1)));
+      for (const sq of seqs) {
+        for (const dir of ALL_DIRS) {
+          const voy = sq + dir;
+          if (futureVoys.has(voy)) continue;
+          const res = await kmtcFetch(vc, voy);
+          if (!res.ok || !res.rows.length) continue;
+          const rows = normalizePortCalls(vc, voy, dir, res.rows)
+            .filter(r => !existingKeys.has(keyOf(r)));
+          if (!rows.length) continue;
+          await sbPost('schedules', rows);
+          rows.forEach(r => existingKeys.add(keyOf(r)));
+          siblingVoys++;
+          console.log(`${vc}/${voy}: sibling direction added` +
+            ` (${rows.length} rows)`);
+        }
+      }
+    }
+
+    // ── Step 5: Drop voyages entirely beyond the purge horizon ──
+    // Stale proformas from the old full fetch, or a withdrawn service
+    // whose numbers the gateway still answers for.
+    let farPurged = 0;
+    if (discover) {
+      const { data: farRows } = await sb
+        .from('schedules')
+        .select('voyage_no')
+        .eq('vessel_code', vc)
+        .gt('eta', purgeStr);
+      const { data: nearRows } = await sb
+        .from('schedules')
+        .select('voyage_no')
+        .eq('vessel_code', vc)
+        .lte('eta', purgeStr);
+      const near = new Set((nearRows || []).map(r => r.voyage_no));
+      const far = new Set((farRows || []).map(r => r.voyage_no));
+      for (const fv of far) {
+        if (near.has(fv)) continue;
+        await sbDelete('schedules', {
+          vessel_code: vc, voyage_no: fv
+        });
+        farPurged++;
+      }
+      if (farPurged) await lowerVoyageCache(vc, c.prefix, c.seq);
+    }
+
     totalUpdated += updatedCount;
     console.log(`${vc}: +${newRows.length} new,` +
       ` ${refreshedVoys}/${futureVoys.size} voys refreshed` +
       (skippedVoys ? `, ${skippedVoys} skipped (API)` : '') +
-      (purgedVoys ? `, ${purgedVoys} ghost purged` : ''));
+      (purgedVoys ? `, ${purgedVoys} ghost purged` : '') +
+      (siblingVoys ? `, ${siblingVoys} sibling dir added` : '') +
+      (farPurged ? `, ${farPurged} beyond horizon dropped` : ''));
 
     await sleep(300);
   }
@@ -644,14 +718,14 @@ async function main() {
     await fetchSingleVessel(vesselCode);
   } else if (mode === 'daily') {
     // Once a day: look for new voyages and refresh the wide horizon
-    await syncSchedules({ discover: true, aheadDays: 90 });
+    await syncSchedules({ discover: true, aheadDays: HORIZON_DAYS });
     await syncRoutes(sb, {});
   } else if (mode === 'wide') {
     // Midday and evening: same sweep as daily, minus the route sync.
     // KMTC revises schedules during office hours; one sweep at dawn
     // left those changes invisible until the next morning.
     await syncSchedules({
-      discover: true, aheadDays: 90, vessels: vesselCode });
+      discover: true, aheadDays: HORIZON_DAYS, vessels: vesselCode });
   } else if (mode === 'longrange') {
     // Weekly: proforma voyages beyond the daily horizon. They drift by
     // weeks otherwise, since nothing else touches them until they come

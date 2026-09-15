@@ -4,13 +4,11 @@ on:
   schedule:
     # Frequent run — active voyages within 30 days, no voyage discovery
     - cron: '0 */2 * * *'
-    # Daily wide sweep — 90-day horizon + discovery + route sync (05:40 KST)
+    # Daily wide sweep — 45-day horizon + discovery + route sync (05:40 KST)
     - cron: '40 20 * * *'
     # Extra wide sweeps after KMTC office-hour revisions (12:40 / 19:40 KST)
     - cron: '40 3 * * *'
     - cron: '40 10 * * *'
-    # Weekly long-range sweep — voyages 90..400 days out (Sat 22:00 KST)
-    - cron: '0 13 * * 6'
   workflow_dispatch:
     inputs:
       mode:
