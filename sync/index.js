@@ -20,11 +20,14 @@ const ALL_DIRS = ['S', 'N', 'E', 'W', 'D', 'P'];
 const MIN_INTERVAL_MS = 800;
 const MAX_RETRIES = 5;
 
-// Crews only act on the next few weeks. Voyages that start past this
-// are not stored, and stored ones drifting beyond PURGE_DAYS are
-// dropped — long-range proformas drift and cost gateway quota.
-const HORIZON_DAYS = 45;
-const PURGE_DAYS = 60;
+// Long-haul services need six months of proforma ahead. Voyages that
+// start past HORIZON_DAYS are not stored, and stored ones drifting
+// beyond PURGE_DAYS are dropped. The frequent sweeps only refresh
+// NEAR_DAYS ahead; the far tail drifts slowly and is refreshed by the
+// twice-weekly long-range sweep to keep gateway quota flat.
+const HORIZON_DAYS = 180;
+const PURGE_DAYS = 200;
+const NEAR_DAYS = 45;
 
 let lastCallAt = 0;
 let rateLimitHits = 0;
@@ -419,7 +422,10 @@ async function syncSchedules(opts) {
 
     let discoveryFailed = false;
 
-    for (let ns = c.seq + 1; discover && ns <= c.seq + 3; ns++) {
+    // Up to six numbers per sweep: a short-loop feeder publishes
+    // eight voyages a month, so three would take a week to catch up
+    // when the horizon widens. The probe stops at the first gap.
+    for (let ns = c.seq + 1; discover && ns <= c.seq + 6; ns++) {
       let seqFound = false;
       for (const dir of ALL_DIRS) {
         const voy = c.prefix +
@@ -717,21 +723,22 @@ async function main() {
   } else if (mode === 'single' && vesselCode) {
     await fetchSingleVessel(vesselCode);
   } else if (mode === 'daily') {
-    // Once a day: look for new voyages and refresh the wide horizon
-    await syncSchedules({ discover: true, aheadDays: HORIZON_DAYS });
+    // Once a day: look for new voyages and refresh the near window
+    await syncSchedules({ discover: true, aheadDays: NEAR_DAYS });
     await syncRoutes(sb, {});
   } else if (mode === 'wide') {
     // Midday and evening: same sweep as daily, minus the route sync.
     // KMTC revises schedules during office hours; one sweep at dawn
     // left those changes invisible until the next morning.
     await syncSchedules({
-      discover: true, aheadDays: HORIZON_DAYS, vessels: vesselCode });
+      discover: true, aheadDays: NEAR_DAYS, vessels: vesselCode });
   } else if (mode === 'longrange') {
-    // Weekly: proforma voyages beyond the daily horizon. They drift by
-    // weeks otherwise, since nothing else touches them until they come
-    // within 90 days.
+    // Twice a week: proforma voyages beyond the near window, out to the
+    // full horizon. Nothing else touches them until they come within
+    // NEAR_DAYS, so without this they drift by weeks.
     await syncSchedules({
-      discover: false, fromDays: 90, aheadDays: 400, vessels: vesselCode });
+      discover: false, fromDays: NEAR_DAYS, aheadDays: HORIZON_DAYS,
+      vessels: vesselCode });
   } else if (mode === 'routes') {
     await syncRoutes(sb, {});
   } else if (mode === 'routes-backfill') {

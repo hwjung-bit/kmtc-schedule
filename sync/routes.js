@@ -168,7 +168,7 @@ async function fetchLegRoutes(polCtr, polCd, podCtr, podCd,
  *
  * @param sb                Supabase client
  * @param opts.backDays     how far back to cover (default 45)
- * @param opts.aheadDays    how far ahead to cover (default 150)
+ * @param opts.aheadDays    how far ahead to cover (default 190)
  * @param opts.skipResolved leave voyages that already carry a route alone.
  *                          Backfill runs set this so each pass advances into
  *                          untouched history instead of redoing the same
@@ -186,7 +186,7 @@ async function fetchLegRoutes(polCtr, polCd, podCtr, podCd,
 async function syncRoutes(sb, opts) {
   opts = opts || {};
   const backDays = opts.backDays || 45;
-  const aheadDays = opts.aheadDays || 150;
+  const aheadDays = opts.aheadDays || 190;
   const allowNeighbour = opts.allowNeighbour !== false;
   maxLegCalls = opts.maxCalls || DEFAULT_MAX_LEG_CALLS;
   legCalls = 0;
