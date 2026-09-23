@@ -23,7 +23,11 @@ const ALL_DIRS = ['S', 'N', 'E', 'W', 'D', 'P'];
 // ease it back over a clean stretch, so a sweep settles at whatever rate
 // the gateway will actually serve.
 const MIN_INTERVAL_MS = 800;
-const MAX_INTERVAL_MS = 6000;
+// Measured 2026-09-23: at 800ms a sweep took 862 rate-limit hits, and
+// letting the interval stretch to 6s only brought that down to 601 while
+// pinning every call at six seconds. The gateway meters volume, not rate,
+// so spacing past a couple of seconds buys little and costs the whole run.
+const MAX_INTERVAL_MS = 3000;
 const EASE_AFTER_CLEAN = 25;
 const MAX_RETRIES = 5;
 
@@ -490,8 +494,15 @@ async function syncSchedules(opts) {
     // dead in December — KNH showed 66 days while the fleet showed
     // six months. When the current prefix yields nothing new, try
     // the next year's first few numbers before giving up.
+    // Probing costs 18 gateway calls, so only spend them on a vessel that
+    // has genuinely run out of numbers. A vessel whose stored schedule
+    // already reaches the horizon stopped because of the cap, not the
+    // calendar; probing it every sweep burned 468 calls a run fleet-wide
+    // and hit once.
     let rolledPrefix = null;
-    if (discover && !discoveryFailed && maxSeq === c.seq) {
+    const ranOutEarly = discover && !discoveryFailed && maxSeq === c.seq
+      && await horizonIsShort(vc, horizonStr);
+    if (ranOutEarly) {
       const nextPrefix = String(Number(c.prefix) + 1).padStart(2, '0');
       for (let ns = 1; ns <= 3 && !rolledPrefix; ns++) {
         for (const dir of ALL_DIRS) {
@@ -617,9 +628,11 @@ async function syncSchedules(opts) {
     // A service change renumbers 2608S/N into 2608W/E. The refresh
     // only re-fetches stored keys and discovery never looks below
     // the cached sequence, so probe the other directions of every
-    // active sequence.
+    // active sequence. Five probes per active sequence per vessel is
+    // the single largest call sink and it fires perhaps once a month,
+    // so it runs on the daily sweep rather than on every wide one.
     let siblingVoys = 0;
-    if (discover) {
+    if (opts.siblings) {
       const seqs = new Set(
         [...futureVoys].map(v => v.slice(0, -1)));
       for (const sq of seqs) {
@@ -740,6 +753,29 @@ async function gatewayKnowsVessel(vesselCode) {
 // Called after a purge, with the prefix the sweep started on. A vessel that
 // rolled over this same sweep is already on the new prefix, so the caller
 // skips it rather than dragging the cache back into the old year.
+/**
+ * True when a vessel's stored schedule stops well short of the horizon.
+ * That is the signature of a service that renumbered — the gateway has
+ * more to give but not under the numbers we are asking for. A vessel
+ * sitting at the horizon is simply capped and needs no rollover probe.
+ */
+async function horizonIsShort(vesselCode, horizonStr) {
+  const { data } = await sb
+    .from('schedules')
+    .select('eta')
+    .eq('vessel_code', vesselCode)
+    .order('eta', { ascending: false })
+    .limit(1);
+  const last = data && data[0] && data[0].eta;
+  if (!last) return true;
+  // 30 days of slack: a fortnightly service can sit a couple of sailings
+  // below the cap without having renumbered.
+  const slack = new Date(
+    new Date(horizonStr).getTime() - 30 * 24 * 3600 * 1000)
+    .toISOString().split('T')[0];
+  return last.slice(0, 10) < slack;
+}
+
 async function lowerVoyageCache(vesselCode, prefix, cachedSeq) {
   const { data } = await sb
     .from('schedules')
@@ -796,7 +832,8 @@ async function main() {
     await fetchSingleVessel(vesselCode);
   } else if (mode === 'daily') {
     // Once a day: look for new voyages and refresh the near window
-    await syncSchedules({ discover: true, aheadDays: NEAR_DAYS });
+    await syncSchedules({
+      discover: true, siblings: true, aheadDays: NEAR_DAYS });
     await syncRoutes(sb, {});
   } else if (mode === 'wide') {
     // Midday and evening: same sweep as daily, minus the route sync.
