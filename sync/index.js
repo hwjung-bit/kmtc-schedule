@@ -15,9 +15,16 @@ const sb = createClient(
 
 const ALL_DIRS = ['S', 'N', 'E', 'W', 'D', 'P'];
 
-// Minimum spacing between KMTC API calls. The gateway rate-limits
-// aggressively; bursts get 429 "Resource usage has been exhausted".
+// Spacing between KMTC API calls. The gateway rate-limits aggressively;
+// bursts get 429 "Resource usage has been exhausted". A fixed interval
+// never learns: the 2026-09-18 full sweep spent 3h40m on ~1,800 calls,
+// nearly all of it backoff from 862 rate-limit hits, because each retry
+// went straight back to the same spacing. Widen the gap on every 429 and
+// ease it back over a clean stretch, so a sweep settles at whatever rate
+// the gateway will actually serve.
 const MIN_INTERVAL_MS = 800;
+const MAX_INTERVAL_MS = 6000;
+const EASE_AFTER_CLEAN = 25;
 const MAX_RETRIES = 5;
 
 // Long-haul services need six months of proforma ahead. Voyages that
@@ -32,6 +39,26 @@ const NEAR_DAYS = 45;
 let lastCallAt = 0;
 let rateLimitHits = 0;
 let failedFetches = 0;
+let callInterval = MIN_INTERVAL_MS;
+let peakInterval = MIN_INTERVAL_MS;
+let cleanCalls = 0;
+
+// Back off the steady rate, not just this one call.
+function onRateLimited() {
+  rateLimitHits++;
+  cleanCalls = 0;
+  callInterval = Math.min(
+    Math.round(callInterval * 1.4), MAX_INTERVAL_MS);
+  if (callInterval > peakInterval) peakInterval = callInterval;
+}
+
+// Creep back toward the floor once the gateway stops complaining.
+function onCleanCall() {
+  if (callInterval <= MIN_INTERVAL_MS) return;
+  if (++cleanCalls < EASE_AFTER_CLEAN) return;
+  cleanCalls = 0;
+  callInterval = Math.max(callInterval - 100, MIN_INTERVAL_MS);
+}
 
 // ── KMTC API ────────────────────────────────────────────────────────────────
 
@@ -67,7 +94,7 @@ async function kmtcFetch(vesselCode, voyageNo) {
   }&voyageNo=${encodeURIComponent(voyageNo)}`;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const wait = lastCallAt + MIN_INTERVAL_MS - Date.now();
+    const wait = lastCallAt + callInterval - Date.now();
     if (wait > 0) await sleep(wait);
     lastCallAt = Date.now();
 
@@ -77,7 +104,7 @@ async function kmtcFetch(vesselCode, voyageNo) {
       });
 
       if (resp.status === 429) {
-        rateLimitHits++;
+        onRateLimited();
         await sleep(backoffMs(resp, attempt));
         continue;
       }
@@ -94,16 +121,17 @@ async function kmtcFetch(vesselCode, voyageNo) {
       // so check the payload before giving up.
       if (!Array.isArray(body)) {
         if (isRateLimited(body)) {
-          rateLimitHits++;
+          onRateLimited();
           await sleep(backoffMs(resp, attempt));
           continue;
         }
-        if (isNoData(body)) return { ok: true, rows: [] };
+        if (isNoData(body)) { onCleanCall(); return { ok: true, rows: [] }; }
         failedFetches++;
         console.error(`Bad payload ${vesselCode}/${voyageNo}:`,
           JSON.stringify(body).slice(0, 120));
         return { ok: false, rows: [] };
       }
+      onCleanCall();
       return { ok: true, rows: body };
     } catch (e) {
       console.error(`API error ${vesselCode}/${voyageNo}:`,
@@ -737,7 +765,8 @@ async function lowerVoyageCache(vesselCode, prefix, cachedSeq) {
 
 function reportApiHealth() {
   console.log(`API: ${rateLimitHits} rate-limit retries,` +
-    ` ${failedFetches} failed fetches`);
+    ` ${failedFetches} failed fetches,` +
+    ` interval ${callInterval}ms (peak ${peakInterval}ms)`);
   if (failedFetches > 0) {
     console.error('WARNING: some voyages could not be ' +
       'fetched — data may be stale. The gateway meters total ' +
