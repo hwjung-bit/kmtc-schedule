@@ -454,15 +454,51 @@ async function syncSchedules(opts) {
       else break;
     }
 
+    // ── Step 1b: Year rollover ──
+    // Some services renumber at the turn of the year: KNH runs
+    // 2605E, 2606W, 2606E, 2607D and then jumps straight to 2701S.
+    // Discovery only ever walks the cached prefix, so once the old
+    // year runs out the vessel looks finished and its horizon stops
+    // dead in December — KNH showed 66 days while the fleet showed
+    // six months. When the current prefix yields nothing new, try
+    // the next year's first few numbers before giving up.
+    let rolledPrefix = null;
+    if (discover && !discoveryFailed && maxSeq === c.seq) {
+      const nextPrefix = String(Number(c.prefix) + 1).padStart(2, '0');
+      for (let ns = 1; ns <= 3 && !rolledPrefix; ns++) {
+        for (const dir of ALL_DIRS) {
+          const voy = nextPrefix + '0' + ns + dir;
+          const res = await kmtcFetch(vc, voy);
+          if (!res.ok) { discoveryFailed = true; break; }
+          if (!res.rows.length) continue;
+          const rows = normalizePortCalls(vc, voy, dir, res.rows);
+          if (startsBeyond(rows)) continue;
+          rolledPrefix = { prefix: nextPrefix, seq: ns };
+          for (const r of rows) {
+            const key = keyOf(r);
+            if (!existingKeys.has(key)) {
+              newRows.push(r);
+              existingKeys.add(key);
+            }
+          }
+        }
+        if (discoveryFailed) break;
+      }
+      if (rolledPrefix) {
+        console.log(`${vc}: year rollover ${c.prefix} -> ` +
+          `${rolledPrefix.prefix}${String(rolledPrefix.seq).padStart(2, '0')}`);
+      }
+    }
+
     if (newRows.length) {
       await sbPost('schedules', newRows);
       totalNew += newRows.length;
     }
-    if (!discoveryFailed && maxSeq > c.seq) {
+    if (!discoveryFailed && (maxSeq > c.seq || rolledPrefix)) {
       await sbUpsert('voyage_cache', [{
         vessel_code: vc,
-        last_prefix: c.prefix,
-        last_seq: maxSeq
+        last_prefix: rolledPrefix ? rolledPrefix.prefix : c.prefix,
+        last_seq: rolledPrefix ? rolledPrefix.seq : maxSeq
       }], 'vessel_code');
     }
 
@@ -544,7 +580,9 @@ async function syncSchedules(opts) {
         purgedVoys++;
         console.log(`${vc}/${gvoy}: GHOST purged (gateway has no data)`);
       }
-      if (purgedVoys) await lowerVoyageCache(vc, c.prefix, c.seq);
+      if (purgedVoys && !rolledPrefix) {
+        await lowerVoyageCache(vc, c.prefix, c.seq);
+      }
     }
 
     // ── Step 4: Sibling directions ──
@@ -598,7 +636,9 @@ async function syncSchedules(opts) {
         });
         farPurged++;
       }
-      if (farPurged) await lowerVoyageCache(vc, c.prefix, c.seq);
+      if (farPurged && !rolledPrefix) {
+        await lowerVoyageCache(vc, c.prefix, c.seq);
+      }
     }
 
     totalUpdated += updatedCount;
@@ -669,6 +709,9 @@ async function gatewayKnowsVessel(vesselCode) {
  * sequence. Discovery probes from the cache, so pull it down or the
  * republished voyage would never be found.
  */
+// Called after a purge, with the prefix the sweep started on. A vessel that
+// rolled over this same sweep is already on the new prefix, so the caller
+// skips it rather than dragging the cache back into the old year.
 async function lowerVoyageCache(vesselCode, prefix, cachedSeq) {
   const { data } = await sb
     .from('schedules')
