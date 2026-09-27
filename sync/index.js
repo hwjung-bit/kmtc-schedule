@@ -831,20 +831,24 @@ async function main() {
   } else if (mode === 'single' && vesselCode) {
     await fetchSingleVessel(vesselCode);
   } else if (mode === 'daily') {
-    // Once a day: look for new voyages and refresh the near window
+    // Once a day, refresh everything we hold, not just the near window.
+    // The far tail used to wait for the twice-weekly long-range sweep, so
+    // a revision KMTC made on a Sunday stayed invisible until Wednesday
+    // — KSZ's November calls sat 13 hours out for two days. The sweep is
+    // roughly three times faster since the probe cleanup, so the whole
+    // horizon now fits in the daily run.
     await syncSchedules({
-      discover: true, siblings: true, aheadDays: NEAR_DAYS });
+      discover: true, siblings: true, aheadDays: HORIZON_DAYS });
     await syncRoutes(sb, {});
   } else if (mode === 'wide') {
-    // Midday and evening: same sweep as daily, minus the route sync.
-    // KMTC revises schedules during office hours; one sweep at dawn
-    // left those changes invisible until the next morning.
+    // Midday and evening, while KMTC is revising: the near window only,
+    // so the two extra sweeps stay cheap. The dawn run covers the rest.
     await syncSchedules({
       discover: true, aheadDays: NEAR_DAYS, vessels: vesselCode });
   } else if (mode === 'longrange') {
-    // Twice a week: proforma voyages beyond the near window, out to the
-    // full horizon. Nothing else touches them until they come within
-    // NEAR_DAYS, so without this they drift by weeks.
+    // Safety net for the far tail, in case a daily run is cut short.
+    // The daily sweep now covers this range too, so this normally finds
+    // nothing to change.
     await syncSchedules({
       discover: false, fromDays: NEAR_DAYS, aheadDays: HORIZON_DAYS,
       vessels: vesselCode });
