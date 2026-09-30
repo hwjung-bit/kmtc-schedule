@@ -2168,18 +2168,12 @@ function renderOverviewBody() {
     return row;
   };
 
-  // Group by TEU class; each group collapses (open state kept per device)
-  let open;
-  try {
-    open = new Set(JSON.parse(
-      localStorage.getItem('kmtc_ov_open') || '["fav"]'));
-  } catch (e) { open = new Set(['fav']); }
+  // Group by TEU class; every group starts collapsed on app load
+  // (open state lives in memory only, so it survives tab switches)
+  if (!state.ovOpen) state.ovOpen = new Set();
+  const open = state.ovOpen;
   const toggle = key => {
     if (open.has(key)) open.delete(key); else open.add(key);
-    try {
-      localStorage.setItem('kmtc_ov_open',
-        JSON.stringify([...open]));
-    } catch (e) { /* private mode */ }
     renderOverviewBody();
   };
   const section = (key, title, color, ships) => {
@@ -2230,10 +2224,12 @@ function renderOverviewBody() {
       body.appendChild(wrap);
     }
   };
-  section('fav', '★ 즐겨찾기', '#f6a623',
-    allShips.filter(s => favSet.has(s.code)));
+  // Favorites: always visible on top, excluded from the TEU groups
+  allShips.filter(s => favSet.has(s.code))
+    .forEach(s => body.appendChild(makeRow(s)));
   GROUP_ORDER.forEach(g => {
-    const ships = allShips.filter(s => groupKey(s) === g);
+    const ships = allShips.filter(s =>
+      !favSet.has(s.code) && groupKey(s) === g);
     if (ships.length) section(g, g, groupColor(ships[0]), ships);
   });
 }
