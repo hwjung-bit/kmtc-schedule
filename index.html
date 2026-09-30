@@ -878,7 +878,7 @@ function groupColor(ship) {
   }
   // Fallback based on size_type text
   const st = (ship.size_type || '').toUpperCase();
-  if (/700|1000/.test(st)) return '#00897b';
+  if (/\b(700|1000)\b/.test(st)) return '#00897b';
   if (/1800|BKKMAX/.test(st)) return '#1e88e5';
   if (/2500|2800/.test(st)) return '#3949ab';
   if (/4300/.test(st)) return '#6a3ab5';
@@ -887,7 +887,7 @@ function groupColor(ship) {
 }
 function groupKey(ship) {
   const st = (ship.size_type || '').toUpperCase();
-  if (/700|1000/.test(st)) return '700~1000 TEU';
+  if (/\b(700|1000)\b/.test(st)) return '700~1000 TEU';
   if (/1800|BKKMAX/.test(st)) return '1800 TEU';
   if (/2500|2800/.test(st)) return '2500~2800 TEU';
   if (/4300/.test(st)) return '4300 TEU';
