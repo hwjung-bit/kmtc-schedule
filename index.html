@@ -2082,7 +2082,7 @@ function renderOverviewBody() {
     return (ai < 0 ? 9999 : ai) - (bi < 0 ? 9999 : bi);
   });
 
-  allShips.forEach(ship => {
+  const makeRow = ship => {
     const code = ship.code;
     const pos = getShipPosition(state.schedules[code] || [], code);
     const color = groupColor(ship);
@@ -2165,7 +2165,76 @@ function renderOverviewBody() {
       );
     }
 
-    body.appendChild(row);
+    return row;
+  };
+
+  // Group by TEU class; each group collapses (open state kept per device)
+  let open;
+  try {
+    open = new Set(JSON.parse(
+      localStorage.getItem('kmtc_ov_open') || '["fav"]'));
+  } catch (e) { open = new Set(['fav']); }
+  const toggle = key => {
+    if (open.has(key)) open.delete(key); else open.add(key);
+    try {
+      localStorage.setItem('kmtc_ov_open',
+        JSON.stringify([...open]));
+    } catch (e) { /* private mode */ }
+    renderOverviewBody();
+  };
+  const section = (key, title, color, ships) => {
+    if (!ships.length) return;
+    const isOpen = open.has(key);
+    const counts = {};
+    ships.forEach(s => {
+      const l = getShipPosition(
+        state.schedules[s.code] || [], s.code).status.label;
+      counts[l] = (counts[l] || 0) + 1;
+    });
+    const summary = Object.entries(counts)
+      .map(([l, n]) => l + ' ' + n).join(' · ');
+    body.appendChild(
+      h('div', {style:{
+        display:'flex',alignItems:'center',gap:'8px',
+        padding:'10px 12px',marginBottom:'6px',
+        background:'var(--card)',borderRadius:'12px',
+        border:'1px solid var(--cardbr)',
+        borderLeft:'4px solid ' + color,
+        cursor:'pointer'
+      }, onClick: () => toggle(key)}, [
+        h('span', {style:{
+          fontFamily:'Inter',fontWeight:'800',
+          fontSize:'13px',color:'var(--ink)',
+          flex:'0 0 auto'
+        }}, title),
+        h('span', {style:{
+          fontSize:'11px',color:'var(--ink3)',
+          flex:'0 0 auto'
+        }}, ships.length + '척'),
+        h('span', {style:{
+          flex:'1',fontSize:'10.5px',color:'var(--ink3)',
+          textAlign:'right',overflow:'hidden',
+          textOverflow:'ellipsis',whiteSpace:'nowrap'
+        }}, summary),
+        h('span', {style:{
+          fontSize:'12px',color:'var(--ink3)',
+          flex:'0 0 auto'
+        }}, isOpen ? '▾' : '▸')
+      ])
+    );
+    if (isOpen) {
+      const wrap = h('div', {style:{
+        padding:'0 0 6px 10px'
+      }});
+      ships.forEach(s => wrap.appendChild(makeRow(s)));
+      body.appendChild(wrap);
+    }
+  };
+  section('fav', '★ 즐겨찾기', '#f6a623',
+    allShips.filter(s => favSet.has(s.code)));
+  GROUP_ORDER.forEach(g => {
+    const ships = allShips.filter(s => groupKey(s) === g);
+    if (ships.length) section(g, g, groupColor(ships[0]), ships);
   });
 }
 
