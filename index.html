@@ -965,7 +965,6 @@ const state = {
   // Settings tab
   settingsTab: 'myships',
   settingsSub: 'ship',
-  settingsFleet: 'KMTC',
   favSearch: '',
   accountSub: 'pending',
   pendingUsers: [],
@@ -4784,6 +4783,66 @@ function renderHiddenSettings(body) {
   }
 }
 
+// Collapsible size-group cards for settings ship lists.
+// openAll forces every group open (used while searching).
+function renderShipGroups(body, ships, prefix, openAll, rowFn) {
+  const byGroup = {};
+  ships.forEach(s => {
+    const g = groupKey(s);
+    (byGroup[g] = byGroup[g] || []).push(s);
+  });
+  const orderOf = c => {
+    const i = SHIP_ORDER.indexOf(c);
+    return i < 0 ? 9999 : i;
+  };
+  GROUP_ORDER.forEach(g => {
+    const gs = (byGroup[g] || [])
+      .sort((a, b) => orderOf(a.code) - orderOf(b.code));
+    if (!gs.length) return;
+    const key = prefix + '_' + g;
+    const isOpen = openAll || state.openRegions[key];
+    const groupEl = h('div', {style:{
+      background:'var(--card)',borderRadius:'14px',
+      border:'1px solid var(--cardbr)',
+      overflow:'hidden',
+      boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+      marginBottom:'10px'
+    }});
+    groupEl.appendChild(
+      h('div', {style:{
+        display:'flex',alignItems:'center',
+        justifyContent:'space-between',
+        padding:'12px 14px',cursor:'pointer'
+      }, onClick: () => {
+        state.openRegions[key] = !state.openRegions[key];
+        render();
+      }}, [
+        h('div', {style:{display:'flex',
+          alignItems:'center',gap:'8px'}}, [
+          h('span', {style:{width:'4px',height:'16px',
+            borderRadius:'2px',
+            background:groupColor(gs[0])}}),
+          h('span', {style:{fontSize:'14px',
+            fontWeight:'700',color:'var(--ink)'}}, g),
+          h('span', {style:{fontSize:'11px',
+            color:'var(--muted)'}}, gs.length + '척')
+        ]),
+        h('span', {style:{color:'#9aa5b6',
+          fontSize:'12px'}},
+          isOpen ? '▲' : '▾')
+      ])
+    );
+    if (isOpen) {
+      const listEl = h('div', {style:{
+        borderTop:'1px solid var(--divider)'
+      }});
+      gs.forEach(s => listEl.appendChild(rowFn(s)));
+      groupEl.appendChild(listEl);
+    }
+    body.appendChild(groupEl);
+  });
+}
+
 function renderMyShipsSettings(body) {
   // Ship/Port sub toggle
   const subRow = h('div', {style:{
@@ -4856,62 +4915,20 @@ function renderMyShipsSettings(body) {
   }
 
   if (state.settingsSub === 'ship') {
-    // Fleet toggle
-    const fleetRow = h('div', {style:{
-      display:'flex',gap:'8px',marginBottom:'12px'
-    }});
-    ['KMTC', 'SUNNY'].forEach(f => {
-      const active = state.settingsFleet === f;
-      fleetRow.appendChild(
-        h('span', {style:{
-          flex:'1',textAlign:'center',fontSize:'12px',
-          fontWeight:'700',padding:'7px 0',
-          borderRadius:'8px',cursor:'pointer',
-          color: active ? '#fff' : 'var(--primary)',
-          background: active
-            ? 'var(--primary)' : 'var(--card)',
-          border: '1px solid '
-            + (active
-              ? 'var(--primary)' : 'var(--cardbr)')
-        }, onClick: () => {
-          state.settingsFleet = f; render();
-        }}, f)
-      );
-    });
-    body.appendChild(fleetRow);
-
-    // Ship list
+    // Ship list, grouped by size
     const fq = (state.favSearch||'').trim().toUpperCase();
-    let ships = state.ships.filter(s => {
-      const isSunny = (s.code||'').startsWith('S');
-      if (state.settingsFleet === 'SUNNY'
-          && !isSunny) return false;
-      if (state.settingsFleet === 'KMTC'
-          && isSunny) return false;
-      if (fq) {
-        const code = (s.code||'').toUpperCase();
-        const name = (s.name||'').toUpperCase();
-        if (!code.includes(fq) && !name.includes(fq)) {
-          return false;
-        }
-      }
-      return true;
+    const ships = state.ships.filter(s => {
+      if (!fq) return true;
+      return (s.code||'').toUpperCase().includes(fq)
+        || (s.name||'').toUpperCase().includes(fq);
     });
 
-    const list = h('div', {style:{
-      background:'var(--card)',borderRadius:'14px',
-      border:'1px solid var(--cardbr)',
-      overflow:'hidden',
-      boxShadow:'0 2px 8px rgba(20,40,80,.05)',
-      marginBottom:'22px'
-    }});
-
-    ships.forEach(s => {
+    renderShipGroups(body, ships, 'fav', !!fq, s => {
       const isFav = state.favorites.ship.includes(
         s.code
       );
       const hidden = isHiddenShip(s.code);
-      list.appendChild(
+      return (
         h('div', {style:{
           display:'flex',alignItems:'center',
           justifyContent:'space-between',
@@ -4949,7 +4966,6 @@ function renderMyShipsSettings(body) {
         ])
       );
     });
-    body.appendChild(list);
 
   } else {
     // Port favorites
@@ -5548,16 +5564,8 @@ function renderShipManagement(body) {
       || (s.name||'').toUpperCase().includes(fq);
   });
 
-  const list = h('div', {style:{
-    background:'var(--card)',borderRadius:'14px',
-    border:'1px solid var(--cardbr)',
-    overflow:'hidden',
-    boxShadow:'0 2px 8px rgba(20,40,80,.05)',
-    marginBottom:'22px'
-  }});
-
-  ships.forEach(s => {
-    list.appendChild(
+  renderShipGroups(body, ships, 'mgmt', !!fq, s => {
+    return (
       h('div', {style:{
         display:'flex',alignItems:'center',
         justifyContent:'space-between',
@@ -5617,7 +5625,6 @@ function renderShipManagement(body) {
       ])
     );
   });
-  body.appendChild(list);
 }
 
 function renderShipForm(body) {
