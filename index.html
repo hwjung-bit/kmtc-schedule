@@ -3907,14 +3907,16 @@ function renderCombinedSearch(body) {
 
   results.sort((a, b) => new Date(a.eta) - new Date(b.eta));
 
-  // Split into past and current+future
+  // Split into past and current+future — judge by departure so
+  // long stays (dry dock) that began >14d ago stay visible
+  const endOf = r => parseDate(r.etd) || parseDate(r.eta);
   const pastResults = results.filter(r => {
-    const eta = parseDate(r.eta);
-    return eta && eta < past14;
+    const end = endOf(r);
+    return end && end < past14;
   });
   const recentResults = results.filter(r => {
-    const eta = parseDate(r.eta);
-    return eta && eta >= past14;
+    const end = endOf(r);
+    return end && end >= past14;
   });
   const fromT = state.dateFrom
     ? new Date(state.dateFrom + 'T00:00:00') : null;
