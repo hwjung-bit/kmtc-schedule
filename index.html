@@ -969,6 +969,7 @@ const state = {
   accountSub: 'pending',
   pendingUsers: [],
   registeredUsers: [],
+  rejectedUsers: [],
   showPwForm: false,
   pwNew: '', pwConfirm: '',
   showShipForm: false, editShipCode: null,
@@ -1215,6 +1216,14 @@ async function loadRegisteredUsers() {
   const { data } = await sb
     .from('users').select('*')
     .eq('status', 'active')
+    .order('name');
+  return data || [];
+}
+
+async function loadRejectedUsers() {
+  const { data } = await sb
+    .from('users').select('*')
+    .eq('status', 'rejected')
     .order('name');
   return data || [];
 }
@@ -5217,11 +5226,15 @@ async function renderAdminUsers(body) {
   const subRow = h('div', {style:{
     display:'flex',gap:'8px',marginBottom:'14px'
   }});
-  ['pending', 'registered'].forEach(type => {
+  const SUB_LABEL = {pending:'승인 대기', registered:'등록 사용자',
+    rejected:'거부됨'};
+  ['pending', 'registered', 'rejected'].forEach(type => {
     const active = state.accountSub === type;
     const count = type === 'pending'
       ? state.pendingUsers.length
-      : state.registeredUsers.length;
+      : type === 'rejected'
+        ? state.rejectedUsers.length
+        : state.registeredUsers.length;
     subRow.appendChild(
       h('span', {style:{
         flex:'1',textAlign:'center',fontSize:'12.5px',
@@ -5235,8 +5248,7 @@ async function renderAdminUsers(body) {
       }, onClick: () => {
         state.accountSub = type; render();
       }},
-        (type === 'pending' ? '승인 대기 (' : '등록 사용자 (')
-        + count + ')')
+        SUB_LABEL[type] + ' (' + count + ')')
     );
   });
   body.appendChild(subRow);
@@ -5329,11 +5341,105 @@ async function renderAdminUsers(body) {
             state.pendingUsers.filter(
               x => x.email !== u.email
             );
+          state.rejectedUsers = await loadRejectedUsers();
           showToast(u.name + ' 거절됨');
           render();
         }}, '거절')
       );
       card.appendChild(btns);
+      body.appendChild(card);
+    });
+  } else if (state.accountSub === 'rejected') {
+    // Rejected/revoked users: restore or delete
+    if (!state.rejectedUsers.length) {
+      body.appendChild(
+        h('div', {style:{
+          background:'var(--card)',borderRadius:'14px',
+          border:'1px solid var(--cardbr)',
+          padding:'16px',textAlign:'center',
+          fontSize:'13px',color:'var(--muted)'
+        }}, '거부된 계정이 없습니다.')
+      );
+    }
+    const meSuperR = isSuperAdmin(state.user.email);
+    state.rejectedUsers.forEach(u => {
+      const card = h('div', {style:{
+        background:'var(--card)',borderRadius:'14px',
+        border:'1px solid #f5d0d0',
+        boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+        padding:'13px 15px',marginBottom:'10px'
+      }});
+      card.appendChild(
+        h('div', {style:{fontSize:'14px',
+          fontWeight:'700',color:'var(--ink)'}}, [
+          u.name || u.email,
+          ' ',
+          h('span', {style:{fontSize:'11px',
+            fontWeight:'500',color:'var(--muted)'}},
+            u.dept || '')
+        ])
+      );
+      card.appendChild(
+        h('div', {style:{fontSize:'12px',
+          color:'var(--ink3)',marginTop:'2px'}},
+          u.email)
+      );
+      // Same permission rule as revoke: admins only by super
+      if (meSuperR || u.role !== 'admin') {
+        const btns = h('div', {style:{
+          display:'flex',gap:'8px',marginTop:'10px'
+        }});
+        btns.appendChild(
+          h('button', {style:{
+            flex:'1',height:'36px',border:'none',
+            borderRadius:'9px',background:'#0064B4',
+            color:'#fff',fontWeight:'700',fontSize:'13px',
+            cursor:'pointer'
+          }, onClick: async () => {
+            const ok = await showConfirm(
+              u.name + ' 님의 접근을 다시 허용하시겠습니까?'
+            );
+            if (!ok) return;
+            const { error } = await sb.from('users').update({
+              status: 'active'
+            }).eq('email', u.email);
+            if (error) {
+              showToast('복구 실패: ' + error.message);
+              return;
+            }
+            state.rejectedUsers = await loadRejectedUsers();
+            state.registeredUsers =
+              await loadRegisteredUsers();
+            showToast(u.name + ' 복구 완료');
+            render();
+          }}, '복구')
+        );
+        btns.appendChild(
+          h('button', {style:{
+            flex:'1',height:'36px',
+            border:'1px solid #f5d0d0',borderRadius:'9px',
+            background:'#fdeaea',color:'#d14343',
+            fontWeight:'700',fontSize:'13px',
+            cursor:'pointer'
+          }, onClick: async () => {
+            const ok = await showConfirm(
+              u.name + ' 님의 계정을 삭제하시겠습니까?'
+              + ' (같은 이메일로 다시 가입 신청 가능)'
+            );
+            if (!ok) return;
+            const { error } = await sb.from('users').delete()
+              .eq('email', u.email);
+            if (error) {
+              showToast('삭제 실패: ' + error.message);
+              return;
+            }
+            state.rejectedUsers = await loadRejectedUsers();
+            showToast(u.name + ' 삭제됨');
+            render();
+          }}, '삭제')
+        );
+        card.appendChild(btns);
+      }
       body.appendChild(card);
     });
   } else {
@@ -5449,6 +5555,7 @@ async function renderAdminUsers(body) {
               }).eq('email', u.email);
               state.registeredUsers =
                 await loadRegisteredUsers();
+              state.rejectedUsers = await loadRejectedUsers();
               render();
             }}, '해제')
           );
@@ -6017,12 +6124,14 @@ async function initAppData() {
 
     // Admin data
     if (state.user && (state.user.role === 'admin' || isSuperAdmin(state.user.email))) {
-      const [pending, registered] = await Promise.all([
+      const [pending, registered, rejected] = await Promise.all([
         loadPendingUsers(),
-        loadRegisteredUsers()
+        loadRegisteredUsers(),
+        loadRejectedUsers()
       ]);
       state.pendingUsers = pending;
       state.registeredUsers = registered;
+      state.rejectedUsers = rejected;
     }
   } catch (e) {
     console.error('Init error:', e);
