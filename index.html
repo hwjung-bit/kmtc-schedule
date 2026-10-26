@@ -5188,7 +5188,7 @@ async function renderAdminUsers(body) {
     display:'flex',gap:'8px',marginBottom:'14px'
   }});
   const SUB_LABEL = {pending:'승인 대기', registered:'등록 사용자',
-    rejected:'거부됨'};
+    rejected:'해제됨'};
   ['pending', 'registered', 'rejected'].forEach(type => {
     const active = state.accountSub === type;
     const count = type === 'pending'
@@ -5319,7 +5319,7 @@ async function renderAdminUsers(body) {
           border:'1px solid var(--cardbr)',
           padding:'16px',textAlign:'center',
           fontSize:'13px',color:'var(--muted)'
-        }}, '거부된 계정이 없습니다.')
+        }}, '해제된 계정이 없습니다.')
       );
     }
     const meSuperR = isSuperAdmin(state.user.email);
@@ -5383,11 +5383,17 @@ async function renderAdminUsers(body) {
             fontWeight:'700',fontSize:'13px',
             cursor:'pointer'
           }, onClick: async () => {
+            // Two-step confirm: deletion cannot be undone
             const ok = await showConfirm(
               u.name + ' 님의 계정을 삭제하시겠습니까?'
               + ' (같은 이메일로 다시 가입 신청 가능)'
             );
             if (!ok) return;
+            const ok2 = await showConfirm(
+              '⚠️ 정말 삭제합니까? 되돌릴 수 없습니다. '
+              + u.name + ' (' + u.email + ')'
+            );
+            if (!ok2) return;
             const { error } = await sb.from('users').delete()
               .eq('email', u.email);
             if (error) {
