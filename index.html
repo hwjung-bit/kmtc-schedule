@@ -926,6 +926,7 @@ const state = {
   loginLoading: false,
   regEmail: '', regName: '', regPassword: '', regPasswordConfirm: '',
   regDept: '', regPurpose: '', regError: '',
+  forgotEmail: '', forgotMsg: '', forgotErr: '',
 
   // Data
   ships: [],        // from ships table
@@ -972,6 +973,7 @@ const state = {
   pendingUsers: [],
   registeredUsers: [],
   rejectedUsers: [],
+  resetRequests: [],
   showPwForm: false,
   pwNew: '', pwConfirm: '',
   showShipForm: false, editShipCode: null,
@@ -1220,6 +1222,17 @@ async function loadRegisteredUsers() {
     .eq('status', 'active')
     .order('name');
   return data || [];
+}
+
+// Password reset requests live in `config` as key 'pwreset:<email>'
+const RESET_KEY = 'pwreset:';
+async function loadResetRequests() {
+  const { data } = await sb
+    .from('config').select('*')
+    .like('key', RESET_KEY + '%');
+  return (data || []).map(r => ({
+    email: r.key.slice(RESET_KEY.length), at: r.value
+  }));
 }
 
 async function loadRejectedUsers() {
@@ -1699,6 +1712,8 @@ function renderLogin(app) {
           textDecoration:'underline'},
           onClick: () => {
             state.loginForm = 'forgot';
+            state.forgotMsg = '';
+            state.forgotErr = '';
             render();
           }
         }, '비밀번호를 잊으셨나요?')
@@ -1816,25 +1831,51 @@ function renderLogin(app) {
         fontWeight:'800',color:'#fff'}},
         '비밀번호 찾기')
     );
-    // No mail backend: password reset is done by an admin
+    // No mail backend: request goes to admin, who resets to 1234!
     sec.appendChild(
-      h('div', {style:{
-        fontSize:'13.5px',color:'#e3edf9',marginTop:'26px',
-        background:'rgba(255,255,255,.08)',
-        border:'1px solid rgba(255,255,255,.18)',
-        borderRadius:'12px',padding:'14px 16px',
-        lineHeight:'1.7',wordBreak:'keep-all'
-      }}, [
-        '비밀번호를 잊으셨으면 관리자에게 초기화를 요청해 주세요.',
-        h('br'),
-        '초기화 후 비밀번호 1234! 로 로그인한 뒤, 설정에서 변경하세요.',
-        h('br'), h('br'),
-        '\u{1F4E7} 관리자: 정현우 (hwjung@ekmtc.com)',
-        h('br'),
-        '※ 이미 가입한 이메일로 다시 회원가입하면 '
-          + '"이미 등록된 이메일"로 거절됩니다.'
-      ])
+      h('div', {style:{fontSize:'13px',
+        color:'#a9c2e2',marginTop:'6px',lineHeight:'1.6',
+        wordBreak:'keep-all'}},
+        '초기화를 요청하면 관리자 승인 후 비밀번호가 1234! 로 바뀝니다.'
+        + ' 로그인 후 설정에서 변경하세요.')
     );
+    const form = h('div', {style:{
+      width:'100%',marginTop:'26px',
+      display:'flex',flexDirection:'column',gap:'12px'
+    }});
+    const inp = h('input', {
+      className: 'login-input',
+      type: 'email',
+      placeholder: '가입한 이메일',
+      value: state.forgotEmail
+    });
+    inp.addEventListener('input', e => {
+      state.forgotEmail = e.target.value;
+    });
+    form.appendChild(inp);
+    if (state.forgotErr) {
+      form.appendChild(
+        h('div', {className:'login-error'},
+          state.forgotErr)
+      );
+    }
+    if (state.forgotMsg) {
+      form.appendChild(
+        h('div', {style:{
+          fontSize:'13px',color:'#b6f0c8',
+          background:'rgba(53,208,127,.12)',
+          border:'1px solid rgba(53,208,127,.3)',
+          borderRadius:'12px',padding:'12px 14px',
+          lineHeight:'1.5'
+        }}, '✅ ' + state.forgotMsg)
+      );
+    }
+    form.appendChild(
+      h('button', {className:'login-btn',
+        onClick: handleForgot},
+        '비밀번호 초기화 요청')
+    );
+    sec.appendChild(form);
     wrap.appendChild(sec);
   }
 
@@ -1888,6 +1929,35 @@ async function handleRegister() {
   state.loginForm = 'login';
   state.loginError = '';
   showToast('계정 신청이 완료되었습니다. 관리자 승인을 기다려주세요.');
+  render();
+}
+
+async function handleForgot() {
+  const em = (state.forgotEmail||'').trim().toLowerCase();
+  state.forgotMsg = '';
+  state.forgotErr = '';
+  if (!em || !em.includes('@')) {
+    state.forgotErr = '올바른 이메일을 입력해주세요.';
+    render();
+    return;
+  }
+  const { data: user } = await sb
+    .from('users').select('email,status')
+    .eq('email', em).maybeSingle();
+  if (!user || user.status !== 'active') {
+    state.forgotErr = '승인된 계정이 아닙니다. 이메일을 확인해 주세요.';
+    render();
+    return;
+  }
+  const { error } = await sb.from('config').upsert({
+    key: RESET_KEY + em, value: new Date().toISOString()
+  });
+  if (error) {
+    state.forgotErr = '요청 실패: ' + error.message;
+  } else {
+    state.forgotMsg = '초기화 요청을 보냈습니다. 관리자 승인 후 '
+      + '비밀번호 1234! 로 로그인하세요.';
+  }
   render();
 }
 
@@ -5182,6 +5252,86 @@ async function handleChangePw() {
   render();
 }
 
+function renderResetRequests(body) {
+  const meSuper = isSuperAdmin(state.user.email);
+  state.resetRequests.forEach(req => {
+    const u = state.registeredUsers.find(x => x.email === req.email)
+      || {email: req.email, name: req.email, role: 'user'};
+    const card = h('div', {style:{
+      background:'var(--card)',borderRadius:'14px',
+      border:'1px solid #ffd9b0',
+      boxShadow:'0 2px 8px rgba(20,40,80,.05)',
+      padding:'13px 15px',marginBottom:'10px'
+    }});
+    card.appendChild(
+      h('div', {style:{fontSize:'14px',
+        fontWeight:'700',color:'var(--ink)'}}, [
+        '\u{1F511} ' + (u.name || u.email),
+        ' ',
+        h('span', {style:{fontSize:'11px',
+          fontWeight:'600',color:'#c25d00'}},
+          '비밀번호 초기화 요청')
+      ])
+    );
+    card.appendChild(
+      h('div', {style:{fontSize:'12px',
+        color:'var(--ink3)',marginTop:'2px'}},
+        u.email + ' · ' + fmtShort(new Date(req.at)))
+    );
+    const clear = async () => {
+      await sb.from('config').delete()
+        .eq('key', RESET_KEY + req.email);
+      state.resetRequests = await loadResetRequests();
+      render();
+    };
+    // Admin accounts can only be reset by super admin
+    const canReset = meSuper || u.role !== 'admin';
+    const btns = h('div', {style:{
+      display:'flex',gap:'8px',marginTop:'10px'
+    }});
+    if (canReset) {
+      btns.appendChild(
+        h('button', {style:{
+          flex:'1',height:'36px',border:'none',
+          borderRadius:'9px',background:'#0064B4',
+          color:'#fff',fontWeight:'700',fontSize:'13px',
+          cursor:'pointer'
+        }, onClick: async () => {
+          const ok = await showConfirm(
+            u.name + ' 님의 비밀번호를 1234! 로 초기화하시겠습니까?');
+          if (!ok) return;
+          const { error } = await sb.from('users').update({
+            password_hash: await hashPassword(RESET_PASSWORD)
+          }).eq('email', u.email);
+          if (error) {
+            showToast('초기화 실패: ' + error.message);
+            return;
+          }
+          showToast(u.name + ' 비밀번호 초기화 → 1234!', 4000);
+          await clear();
+        }}, '승인 (1234!)')
+      );
+    }
+    btns.appendChild(
+      h('button', {style:{
+        flex:'1',height:'36px',
+        border:'1px solid #e0e6ee',borderRadius:'9px',
+        background:'var(--card)',color:'var(--ink3)',
+        fontWeight:'600',fontSize:'13px',
+        cursor:'pointer'
+      }, onClick: async () => {
+        const ok = await showConfirm(
+          u.name + ' 님의 초기화 요청을 거절하시겠습니까?');
+        if (!ok) return;
+        showToast(u.name + ' 요청 거절됨');
+        await clear();
+      }}, '거절')
+    );
+    card.appendChild(btns);
+    body.appendChild(card);
+  });
+}
+
 async function renderAdminUsers(body) {
   // Sub-tabs
   const subRow = h('div', {style:{
@@ -5192,7 +5342,7 @@ async function renderAdminUsers(body) {
   ['pending', 'registered', 'rejected'].forEach(type => {
     const active = state.accountSub === type;
     const count = type === 'pending'
-      ? state.pendingUsers.length
+      ? state.pendingUsers.length + state.resetRequests.length
       : type === 'rejected'
         ? state.rejectedUsers.length
         : state.registeredUsers.length;
@@ -5215,7 +5365,8 @@ async function renderAdminUsers(body) {
   body.appendChild(subRow);
 
   if (state.accountSub === 'pending') {
-    if (!state.pendingUsers.length) {
+    renderResetRequests(body);
+    if (!state.pendingUsers.length && !state.resetRequests.length) {
       body.appendChild(
         h('div', {style:{
           background:'var(--card)',borderRadius:'14px',
@@ -6111,14 +6262,17 @@ async function initAppData() {
 
     // Admin data
     if (state.user && (state.user.role === 'admin' || isSuperAdmin(state.user.email))) {
-      const [pending, registered, rejected] = await Promise.all([
-        loadPendingUsers(),
-        loadRegisteredUsers(),
-        loadRejectedUsers()
-      ]);
+      const [pending, registered, rejected, resets] =
+        await Promise.all([
+          loadPendingUsers(),
+          loadRegisteredUsers(),
+          loadRejectedUsers(),
+          loadResetRequests()
+        ]);
       state.pendingUsers = pending;
       state.registeredUsers = registered;
       state.rejectedUsers = rejected;
+      state.resetRequests = resets;
     }
   } catch (e) {
     console.error('Init error:', e);
