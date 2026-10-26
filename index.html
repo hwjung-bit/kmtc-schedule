@@ -1716,7 +1716,7 @@ function renderLogin(app) {
             state.forgotErr = '';
             render();
           }
-        }, '비밀번호를 잊으셨나요?')
+        }, '비밀번호 초기화 요청')
       )
     );
     center.appendChild(
@@ -1829,7 +1829,7 @@ function renderLogin(app) {
     sec.appendChild(
       h('div', {style:{fontSize:'24px',
         fontWeight:'800',color:'#fff'}},
-        '비밀번호 찾기')
+        '비밀번호 초기화 요청')
     );
     // No mail backend: request goes to admin, who resets to 1234!
     sec.appendChild(
@@ -1873,7 +1873,7 @@ function renderLogin(app) {
     form.appendChild(
       h('button', {className:'login-btn',
         onClick: handleForgot},
-        '비밀번호 초기화 요청')
+        '요청 보내기')
     );
     sec.appendChild(form);
     wrap.appendChild(sec);
