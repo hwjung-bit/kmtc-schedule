@@ -394,6 +394,9 @@ function h(tag, attrs, ...kids) {
 }
 
 // SHA-256 password hash
+// Fixed password set by admin reset (user changes it after login)
+const RESET_PASSWORD = '1234!';
+
 async function hashPassword(pw) {
   const data = new TextEncoder().encode(pw);
   const buf = await crypto.subtle.digest('SHA-256', data);
@@ -923,7 +926,6 @@ const state = {
   loginLoading: false,
   regEmail: '', regName: '', regPassword: '', regPasswordConfirm: '',
   regDept: '', regPurpose: '', regError: '',
-  forgotEmail: '', forgotMsg: '', forgotErr: '',
 
   // Data
   ships: [],        // from ships table
@@ -1697,8 +1699,6 @@ function renderLogin(app) {
           textDecoration:'underline'},
           onClick: () => {
             state.loginForm = 'forgot';
-            state.forgotMsg = '';
-            state.forgotErr = '';
             render();
           }
         }, '비밀번호를 잊으셨나요?')
@@ -1816,48 +1816,25 @@ function renderLogin(app) {
         fontWeight:'800',color:'#fff'}},
         '비밀번호 찾기')
     );
+    // No mail backend: password reset is done by an admin
     sec.appendChild(
-      h('div', {style:{fontSize:'13px',
-        color:'#a9c2e2',marginTop:'6px'}},
-        '가입한 이메일로 임시 비밀번호를 보내드립니다.')
+      h('div', {style:{
+        fontSize:'13.5px',color:'#e3edf9',marginTop:'26px',
+        background:'rgba(255,255,255,.08)',
+        border:'1px solid rgba(255,255,255,.18)',
+        borderRadius:'12px',padding:'14px 16px',
+        lineHeight:'1.7',wordBreak:'keep-all'
+      }}, [
+        '비밀번호를 잊으셨으면 관리자에게 초기화를 요청해 주세요.',
+        h('br'),
+        '초기화 후 비밀번호 1234! 로 로그인한 뒤, 설정에서 변경하세요.',
+        h('br'), h('br'),
+        '\u{1F4E7} 관리자: 정현우 (hwjung@ekmtc.com)',
+        h('br'),
+        '※ 이미 가입한 이메일로 다시 회원가입하면 '
+          + '"이미 등록된 이메일"로 거절됩니다.'
+      ])
     );
-    const form = h('div', {style:{
-      width:'100%',marginTop:'26px',
-      display:'flex',flexDirection:'column',gap:'12px'
-    }});
-    const inp = h('input', {
-      className: 'login-input',
-      type: 'email',
-      placeholder: '이메일 (@ekmtc.com)',
-      value: state.forgotEmail
-    });
-    inp.addEventListener('input', e => {
-      state.forgotEmail = e.target.value;
-    });
-    form.appendChild(inp);
-    if (state.forgotErr) {
-      form.appendChild(
-        h('div', {className:'login-error'},
-          state.forgotErr)
-      );
-    }
-    if (state.forgotMsg) {
-      form.appendChild(
-        h('div', {style:{
-          fontSize:'13px',color:'#b6f0c8',
-          background:'rgba(53,208,127,.12)',
-          border:'1px solid rgba(53,208,127,.3)',
-          borderRadius:'12px',padding:'12px 14px',
-          lineHeight:'1.5'
-        }}, '\u2709\uFE0F ' + state.forgotMsg)
-      );
-    }
-    form.appendChild(
-      h('button', {className:'login-btn',
-        onClick: handleForgot},
-        '임시 비밀번호 발송')
-    );
-    sec.appendChild(form);
     wrap.appendChild(sec);
   }
 
@@ -1911,22 +1888,6 @@ async function handleRegister() {
   state.loginForm = 'login';
   state.loginError = '';
   showToast('계정 신청이 완료되었습니다. 관리자 승인을 기다려주세요.');
-  render();
-}
-
-async function handleForgot() {
-  const em = (state.forgotEmail||'').trim().toLowerCase();
-  if (!em || !em.includes('@')) {
-    state.forgotErr = '올바른 이메일을 입력해주세요.';
-    state.forgotMsg = '';
-    render();
-    return;
-  }
-  // In real app, would call an edge function
-  state.forgotErr = '';
-  state.forgotMsg =
-    em + '로 임시 비밀번호를 발송했습니다. '
-    + '로그인 후 설정에서 변경하세요.';
   render();
 }
 
@@ -5558,6 +5519,26 @@ async function renderAdminUsers(body) {
               state.rejectedUsers = await loadRejectedUsers();
               render();
             }}, '해제')
+          );
+          btns.push(
+            h('span', {style:{
+              fontSize:'10.5px',fontWeight:'600',
+              color:'#c25d00',background:'#fff3e0',
+              padding:'5px 8px',borderRadius:'8px',
+              cursor:'pointer'
+            }, onClick: async () => {
+              const ok = await showConfirm(
+                u.name + ' 님의 비밀번호를 1234! 로 초기화?');
+              if (!ok) return;
+              const { error } = await sb.from('users').update({
+                password_hash: await hashPassword(RESET_PASSWORD)
+              }).eq('email', u.email);
+              if (error) {
+                showToast('초기화 실패: ' + error.message);
+                return;
+              }
+              showToast(u.name + ' 비밀번호 초기화 → 1234!', 5000);
+            }}, '비번초기화')
           );
         }
         actions = h('div', {style:{
