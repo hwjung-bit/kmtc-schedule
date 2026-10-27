@@ -908,8 +908,8 @@ const SHIP_ORDER = [
   'KPS','KUS','KKL','KSG','KJT','KSH',
   'KQD','KTJ','KHM','KNB','KSZ',
   'KMB','KDB','KCN','KMN','KJA','KNH',
-  'KMU','KSL','KCB','KDE','KLB','KDH',
-  'SDL','SDY','SAC','SRO','SCV'
+  'KMU','KSL','KYH','KDL','KCB','KDE','KLB','KDH',
+  'SDL','SDY','SAC','SRO','SCV','WCN'
 ];
 
 /* ==================================================
@@ -945,7 +945,7 @@ const state = {
   histLoaded: false,     // full archive pulled
   histLoading: false,
   callLimit: 50,         // date-range list page size
-  searchLimit: 50,       // schedule-tab list page size
+  searchLimit: 20,       // schedule-tab list page size
   showSpec: {},     // code -> bool
   schedQuery: '',
   fleetTab: 'KMTC',
@@ -3708,7 +3708,7 @@ function renderPortTab(container) {
   onInputSafe(portInp, val => {
     state.portQuery = val;
     state.selectedPort = null;
-    state.searchLimit = 50;
+    state.searchLimit = 20;
     render();
   });
   portBox.appendChild(portInp);
@@ -3734,7 +3734,7 @@ function renderPortTab(container) {
   });
   onInputSafe(shipInp, val => {
     state.portShipQuery = val;
-    state.searchLimit = 50;
+    state.searchLimit = 20;
     render();
   });
   shipBox.appendChild(shipInp);
@@ -3857,7 +3857,7 @@ function renderPortTab(container) {
     });
     inp.addEventListener('change', e => {
       state[key] = e.target.value;
-      state.searchLimit = 50;
+      state.searchLimit = 20;
       if (needsHistory(e.target.value)) ensureHistory();
       render();
     });
@@ -3876,7 +3876,7 @@ function renderPortTab(container) {
         cursor:'pointer',padding:'0 4px',userSelect:'none'
       }, onClick: () => {
         state.dateFrom = ''; state.dateTo = '';
-        state.searchLimit = 50; render();
+        state.searchLimit = 20; render();
       }}, '✕')
     );
   }
@@ -3910,8 +3910,10 @@ function renderCombinedSearch(body) {
 
   // Find matching port calls from all schedules
   const now = new Date();
-  const past14 = new Date(
-    now.getTime() - 14 * 24 * 3600 * 1000);
+  // List opens on today's calls; anything finished before today
+  // sits behind the "이전 기록 보기" toggle
+  const today0 = new Date(
+    now.getFullYear(), now.getMonth(), now.getDate());
   const results = [];
 
   Object.entries(state.schedules).forEach(([code, rows]) => {
@@ -3947,16 +3949,16 @@ function renderCombinedSearch(body) {
 
   results.sort((a, b) => new Date(a.eta) - new Date(b.eta));
 
-  // Split into past and current+future — judge by departure so
-  // long stays (dry dock) that began >14d ago stay visible
+  // Split into past and today+future — judge by departure so
+  // long stays (dry dock) that began earlier stay visible
   const endOf = r => parseDate(r.etd) || parseDate(r.eta);
   const pastResults = results.filter(r => {
     const end = endOf(r);
-    return end && end < past14;
+    return end && end < today0;
   });
   const recentResults = results.filter(r => {
     const end = endOf(r);
-    return end && end >= past14;
+    return end && end >= today0;
   });
   const fromT = state.dateFrom
     ? new Date(state.dateFrom + 'T00:00:00') : null;
@@ -4017,7 +4019,7 @@ function renderCombinedSearch(body) {
         },
         onClick: () => {
           state.showPastSearch = !showPastSearch;
-          state.searchLimit = 50;
+          state.searchLimit = 20;
           if (!state.showPastSearch) render();
           else ensureHistory().then(render);
         }
@@ -4054,9 +4056,12 @@ function renderCombinedSearch(body) {
     return;
   }
 
+  // Page only the upcoming part; opened history is shown in full
+  const pageLimit = (!ranged && showPastSearch)
+    ? pastResults.length + state.searchLimit : state.searchLimit;
   let markedCurrent = false;
   let markedDockAnchor = false;
-  displayResults.slice(0, state.searchLimit).forEach(c => {
+  displayResults.slice(0, pageLimit).forEach(c => {
     const eta = parseDate(c.eta);
     const etb = parseDate(c.etb);
     const etd = parseDate(c.etd);
@@ -4166,7 +4171,7 @@ function renderCombinedSearch(body) {
     }, 50);
   }
 
-  if (displayResults.length > state.searchLimit) {
+  if (displayResults.length > pageLimit) {
     body.appendChild(
       h('div', {style:{
         textAlign:'center',fontSize:'12px',
@@ -4175,11 +4180,11 @@ function renderCombinedSearch(body) {
         border:'1px solid var(--cardbr)',
         cursor:'pointer',userSelect:'none'
       }, onClick: () => {
-        state.searchLimit += 100;
+        state.searchLimit += 20;
         render();
       }},
-        '더 보기 (남은 '
-        + (displayResults.length - state.searchLimit) + '건)')
+        '▼ 이후 일정 더 보기 (남은 '
+        + (displayResults.length - pageLimit) + '건)')
     );
   }
 }
