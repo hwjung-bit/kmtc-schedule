@@ -583,7 +583,13 @@ function copyRowOf(c) {
   const eta = parseDate(c.eta);
   const etd = parseDate(c.etd);
   const now = new Date();
-  const status = (etd && etd < now)
+  // Long-stay call = dry dock; mirror the on-screen orange dock card
+  const dockDays = (eta && etd) ? (etd - eta) / 86400000 : 0;
+  const isDock = dockDays >= DOCK_STAY_THRESHOLD_DAYS;
+  const status = isDock
+    ? { text: '\u{1F527} 입거 (' + Math.round(dockDays) + '일)',
+        bg: '#ffe2b8', color: '#c25d00' }
+    : (etd && etd < now)
     ? { text: '완료', bg: '#eef1f6', color: '#97a2b5' }
     : (eta && eta <= now && etd && etd >= now)
       ? { text: '접안중', bg: '#e8f1fb', color: '#0064B4' }
@@ -596,6 +602,7 @@ function copyRowOf(c) {
     terminal: tCode,
     voy: c.voyage_no || '-',
     status: status,
+    isDock: isDock,
     eta: fmtShort(eta),
     etb: fmtShort(parseDate(c.etb)),
     etd: fmtShort(etd)
@@ -639,7 +646,8 @@ function copyCardHtml(rows) {
       + (r.route ? ' · 항로 ' + copyEsc(r.route) : '') + '</div>';
     return '<table cellpadding="0" cellspacing="0" border="0" '
       + 'style="border-collapse:separate;border-spacing:0;'
-      + 'width:470px;background:#ffffff;border:1px solid #e6eaf1;'
+      + 'width:470px;background:' + (r.isDock ? '#fff8ef' : '#ffffff')
+      + ';border:1px solid ' + (r.isDock ? '#ffcd8a' : '#e6eaf1') + ';'
       + 'border-radius:14px;font-family:Malgun Gothic,sans-serif;'
       + 'margin-bottom:8px"><tr>'
       + '<td style="padding:10px 14px;vertical-align:middle">'
@@ -660,6 +668,7 @@ function copyTableText(rows) {
     + (r.route ? ' | 항로 ' + r.route : '')
     + ' | 항구 ' + r.port
     + (r.terminal ? ' | 터미널 ' + r.terminal : '')
+    + (r.isDock ? ' | ' + r.status.text : '')
     + ' | ETA ' + r.eta + ' | ETB ' + r.etb + ' | ETD ' + r.etd
   ).join('\n');
 }
